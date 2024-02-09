@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "numpy>=1.24.4", "xarray>=2023.1.0", "dask>=2023
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mumaxxr_timvgl"
+name = "mumaxxr"
 version = "0.0.1"
 authors = [
   { name="Tim Vogel", email="tim.vogel@physik.uni-kl.de" },

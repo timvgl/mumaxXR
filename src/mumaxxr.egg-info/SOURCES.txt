@@ -1,0 +1,8 @@
+LICENSE
+pyproject.toml
+src/mumaxXR/OvfEngine.py
+src/mumaxXR/__init__.py
+src/mumaxxr.egg-info/PKG-INFO
+src/mumaxxr.egg-info/SOURCES.txt
+src/mumaxxr.egg-info/dependency_links.txt
+src/mumaxxr.egg-info/top_level.txt
