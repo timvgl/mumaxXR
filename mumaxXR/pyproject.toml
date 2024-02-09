@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "numpy>=1.24.4", "xarray>=2023.1.0", "dask>=2023.5.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mumaxxr_timvgl"
+version = "0.0.1"
+authors = [
+  { name="Tim Vogel", email="tim.vogel@physik.uni-kl.de" },
+]
+description = "xarray engine to load ovf files from mumax simulations into xarray"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/timvgl/mumaxXR/"
+Issues = "https://github.com/timvgl/mumaxXR/issues"
