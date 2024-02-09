@@ -1,0 +1,13 @@
+Metadata-Version: 2.1
+Name: mumaxxr_timvgl
+Version: 0.0.1
+Summary: xarray engine to load ovf files from mumax simulations into xarray
+Author-email: Tim Vogel <tim.vogel@physik.uni-kl.de>
+Project-URL: Homepage, https://github.com/timvgl/mumaxXR/
+Project-URL: Issues, https://github.com/timvgl/mumaxXR/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
