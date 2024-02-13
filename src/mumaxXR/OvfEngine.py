@@ -4,6 +4,49 @@ import dask
 import dask.array
 from pathlib import Path
 import re
+import sys
+import os
+from forbiddenfruit import curse
+
+class custom_string():
+    def replace_substring_at_nth(self, oldSubstring, newSubstring="", n=-1, count=-1):
+        beforeN = self[:n]
+        if (n == -1):
+            afterN = ''
+        else:
+            afterN = self[n+1:]
+        return beforeN + self[n].replace(oldSubstring, newSubstring, count) + afterN
+    def check_upper_available(self):
+        for char in self:
+            if (char.isupper()):
+                return True
+        return False
+
+    def check_lower_available(self):
+        for char in self:
+            if (char.islower()):
+                return True
+        return False
+    def cast_toFloatExceptString(self):
+        try:
+            self = float(self)
+        except:
+            self = str(self)
+        return self
+    
+curse(str, "check_upper_available", custom_string.check_upper_available)
+curse(str, "check_lower_available", custom_string.check_lower_available)
+curse(str, "replace_substring_at_nth", custom_string.replace_substring_at_nth)
+curse(str, "cast_toFloatExceptString", custom_string.cast_toFloatExceptString)
+
+class HiddenPrints:
+    def __enter__(self):
+        self._original_stdout = sys.stdout
+        sys.stdout = open(os.devnull, 'w')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout.close()
+        sys.stdout = self._original_stdout
 
 _binary = 4
 class MumaxMesh:
@@ -193,18 +236,51 @@ class OvfEngine(xr.backends.BackendEntrypoint):
         file.close()
         return data
     
-
-if __name__ == "__main__":
-    #arr = xr.open_dataset(r"/home/tvo/Data_Disk/mumax-python-server/mumaxDataRaw/eta_1e+16_script.mod.out/m000000.ovf", engine=OvfEngine)
-    dirList = [r"/home/tvo/Data_Disk/mumax-python-server/mumaxDataRaw/eta_1e+17_script.mod.out/"]
-    arr = xr.open_mfdataset(sorted(list(Path(r"/home/tvo/Data_Disk/mumax-python-server/mumaxDataRaw/eta_1e+16_script.mod.out/").glob("**/m*.ovf"))), parallel=True, chunks={"t": 1}, engine=OvfEngine, wavetype=["m", "u"], dirListToConcat=dirList, sweepName="eta", sweepParam=[1e+16, 1e+17])
-    #load all m*.ovf files
-    #run parallel
-    #set chunks
-    #set engine
-    #if u files are as ovf files available concat in wavetype - same amount of u and m ovf files needed, optional
-    #paramsweep that is supposed to concatenated? -> pass all dir in lists. same amount of ovf files as in first arg needed - if wavetypes are there, same amount for u and m
-    #give name for sweep param (for dim) - if no name is passed, dim is labled as unknown
-    #sweep params for coords of param - if no list is passed, generated ints from 0 to length of dirList
-    print(arr)
-    arr.to_netcdf("testooooooooo.nc")
+def convert_TableFile_to_dataset(tableTxtFilePath):
+    tableArrayVec = None
+    tableArraySc = None
+    with HiddenPrints():
+        numpyData = np.loadtxt(tableTxtFilePath, dtype=np.float32)
+        with open(tableTxtFilePath, "r") as tableFile:
+            titleLine = tableFile.readline()
+    numpyData = numpyData[np.unique(numpyData[:,0], return_index=True)[1]]
+    colList = np.asarray([col.replace("\n", "").replace("# ", "").split(" ")[0].replace_substring_at_nth("x").replace_substring_at_nth("y").replace_substring_at_nth("z") for col in titleLine.split("\t")])
+    colListUniqueUnsorted, colListUniqueIndex, counts = np.unique(colList, return_index=True, return_counts=True)
+    colListUnique = colList[np.sort(colListUniqueIndex)].tolist()
+    counts = counts[[colListUniqueUnsorted.tolist().index(col) for col in colListUnique]]
+    counts = counts.tolist()
+    if (3 in counts[1:]):
+        dimsVec = ["t", "comp"]
+        coordsVec = {"t": numpyData[:,0], "comp": [0, 1, 2]}
+    if (1 in counts[1:]):
+        dimsSc = ["t"]
+        coordsSc = {"t": numpyData[:,0]}
+    if (len(counts) > 1):
+        colListUniqueVec = []
+        colListUniqueSc = []
+        for col in colListUnique[1:]:
+            if (counts[colListUnique.index(col)] == 3):
+                colListUniqueVec.append(col)
+            elif (counts[colListUnique.index(col)] == 1):
+                colListUniqueSc.append(col)
+        if (3 in counts[1:]):
+            dimsVec = ["datatypeVec"] + dimsVec
+            coordsVec["datatypeVec"] = colListUniqueVec
+        if (1 in counts[1:]):
+            dimsSc = ["datatypeSc"] + dimsSc
+            coordsSc["datatypeSc"] = colListUniqueSc
+    indexList = [1] + [sum(counts[:i+1]) for i in range(len(counts)) if i >= 1]
+    lengthTableDimsList = counts[1:]
+    if (3 in counts[1:]):
+        tableArrayVec = xr.DataArray(np.concatenate(tuple([[numpyData[:,indexList[i-1]:indexList[i]]] for i in range(len(indexList)) if i >= 1 and np.abs(indexList[i-1]-indexList[i]) == 3]), axis=0), dims=dimsVec, coords=coordsVec)
+    if (1 in counts[1:]):
+        tableArraySc = xr.DataArray(np.concatenate(tuple([[numpyData[:,indexList[i-1]]] for i in range(len(indexList)) if i >= 1 and np.abs(indexList[i-1]-indexList[i]) == 1]), axis=0), dims=dimsSc, coords=coordsSc)
+    dataset = None
+    if (isinstance(tableArrayVec, xr.DataArray)):
+        dataset = tableArrayVec.expand_dims('vec', 0).to_dataset('vec').rename({0: 'vec'})
+        if (isinstance(tableArraySc, xr.DataArray)):
+            dataset['sc'] = tableArraySc
+    else:
+        if (isinstance(tableArraySc, xr.DataArray)):
+            dataset = tableArraySc.expand_dims('sc', 0).to_dataset('sc').rename({0: 'sc'})
+    return dataset

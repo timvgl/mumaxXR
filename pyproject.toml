@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "numpy>=1.24.4", "xarray>=2023.1.0", "dask>=2023.5.0"]
+requires = ["setuptools>=61.0", "numpy>=1.24.4", "xarray>=2023.1.0", "dask>=2023.5.0", "forbiddenfruit>=0.1.4"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "mumaxxr"
-version = "0.0.1"
+version = "0.0.2"
 authors = [
   { name="Tim Vogel", email="tim.vogel@physik.uni-kl.de" },
 ]
