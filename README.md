@@ -1,6 +1,6 @@
 mumaxXR contains an engine for xarray to read output directories of mumax directly, lazily into xarray.
 Therefore, the class OvfEngine needs to be imported from mumaxXR. A single directory containing ovf files for magnetization only can be imported using the built-in library pathlib.
-In this example, the directory path is converted into a Path object. Using .glob('**/m*.ovf') allows the loading of all the m*.ovf files.
+In this example, the directory path is converted into a Path object. Using the glob definition allows the loading of all the m*.ovf files.
 After sorting the list (important, because otherwise, the time dimension is going to be messed up), the concat_dim has to be defined. For mumax-sim, it is always 't'. This is because in the background,
 each ovf file is opened as a single dataset and each ovf file is representive for a single time step.
 All these datasets are then concatenated along the time dimension using open_mfdataset. The combine argument has to be 'nested', and parallel=True is set for the fastest experience.
