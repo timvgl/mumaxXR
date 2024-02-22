@@ -7,6 +7,7 @@ import re
 import sys
 import os
 from forbiddenfruit import curse
+import warnings
 
 class custom_string():
     def replace_substring_at_nth(self, oldSubstring, newSubstring="", n=-1, count=-1):
@@ -33,11 +34,43 @@ class custom_string():
         except:
             self = str(self)
         return self
+
+def castableList(inputList):
+    try:
+        list(inputList)
+        return True
+    except TypeError:
+        return False
+
+class custom_list():
+    def isinstance_recursive(self, checkType, maxDepth=-1, currentDepth=0):
+        isTypeList = []
+        for self_ in self:
+            if (castableList(self_) and (maxDepth != -1 and currentDepth != maxDepth or maxDepth == -1)):
+                currentDepth += 1
+                isTypeList.append(list(self_).isinstance_recursive(checkType, maxDepth=maxDepth, currentDepth=currentDepth))
+            else:
+                isTypeList.append(isinstance(self_, checkType))
+        if (False in isTypeList):
+            return False
+        else:
+            return True
+    def is_homogenious(self):
+        try:
+            np.asarray(self)
+            return True
+        except ValueError:
+            return False
+        
+                
     
 curse(str, "check_upper_available", custom_string.check_upper_available)
 curse(str, "check_lower_available", custom_string.check_lower_available)
 curse(str, "replace_substring_at_nth", custom_string.replace_substring_at_nth)
 curse(str, "cast_toFloatExceptString", custom_string.cast_toFloatExceptString)
+
+curse(list, "isinstance_recursive", custom_list.isinstance_recursive)
+curse(list, "is_homogenious", custom_list.is_homogenious)
 
 class HiddenPrints:
     def __enter__(self):
@@ -89,10 +122,30 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                 dirListToConcat = [filename_or_obj.parent] + dirListToConcat
             if (sweepName == ''):
                 sweepName = "unknown"
-            if (len(sweepParam) == len(dirListToConcat)):
-                coordsParam = np.array(sweepParam)
-            else:
-                coordsParam = np.array(range(len(dirListToConcat)))
+            if (isinstance(sweepParam, list)):
+                if (len(sweepParam) > 0 and isinstance(sweepParam, (float, int))):
+                    if (len(sweepParam) == len(dirListToConcat)):
+                        coordsParam = np.array(sweepParam)
+                    else:
+                        coordsParam = np.array(range(len(dirListToConcat)))
+                elif (len(sweepParam) > 0 and sweepParam.isinstance_recursive((int, float)) and sweepParam.is_homogenious()):
+                    coordsParam = [np.array(param) for param in sweepParam]
+                    if (len(sweepName) != len(list(sweepParam[0])) or not isinstance(sweepName, (list, tuple))):
+                        if (not isinstance(sweepName, (list, tuple))):
+                            sweepName = [sweepName]
+                        if len(sweepName) < len(list(sweepParam[0])):
+                            warnings.warn('Not enough labels for sweep labeling found. Appending ...')
+                            for i in range(len(list(sweepParam[0])) - len(sweepName)):
+                                sweepName.append('unknown')
+                        else:
+                            warnings.warn('Too many labels for sweep labeling found. Trimming ...')
+                            sweepName = sweepName[:len(list(coordsParam[0]))]
+                    sortIndices = []
+                    for row in sorted(sweepParam):
+                        sortIndices.append(sweepParam.index(row))
+                    dirListToConcat = [dirListToConcat[i] for i in sortIndices]
+                else:
+                    raise ValueError('Provided coords are not homogenious. Tuples or lists in list must be the same size for all entries.')
 
         mesh = self.read_mesh_from_ovf(filename_or_obj)
         dims = None
@@ -117,38 +170,101 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                         data = dask.array.concatenate((data, dask.array.expand_dims(newData, 0)), axis=0)
         else:
             if (len(wavetype) == 0):
-                dims = [sweepName, 't', 'z', 'y', 'x', 'comp']
-                coords = [coordsParam, np.array([mesh.tmax]), mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
-                shape = (1, ) + tuple([axis.shape[0] for axis in coords[2:]])
-                for dir in dirListToConcat:
-                    if (data is None):
-                        data = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh), shape=shape, dtype=dtype), 0)
-                    else:
-                        newData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh), shape=shape, dtype=dtype)
-                        data = dask.array.concatenate((data, dask.array.expand_dims(newData, 0)), axis=0)
+                if (isinstance(sweepName, str)):
+                    dims = [sweepName, 't', 'z', 'y', 'x', 'comp']
+                    coords = [coordsParam, np.array([mesh.tmax]), mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
+                    shape = (1, ) + tuple([axis.shape[0] for axis in coords[2:]])
+                    for dir in dirListToConcat:
+                        if (data is None):
+                            data = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh), shape=shape, dtype=dtype), 0)
+                        else:
+                            newData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh), shape=shape, dtype=dtype)
+                            data = dask.array.concatenate((data, dask.array.expand_dims(newData, 0)), axis=0)
+                else:
+                    dims = sweepName + ['t', 'z', 'y', 'x', 'comp']
+                    coords = [np.array([mesh.tmax]), mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
+                    shape = (1, ) + tuple([axis.shape[0] for axis in coords])
+                    for dir in dirListToConcat:
+                        if (data is None):
+                            data = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh), shape=shape, dtype=dtype), 0)
+                        else:
+                            newData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh), shape=shape, dtype=dtype)
+                            data = dask.array.concatenate((data, dask.array.expand_dims(newData, 0)), axis=0)
+                    shape = None
+                    for i in range(np.transpose(np.asarray(coordsParam))[:,0].size):
+                        if shape == None:
+                            shape = (np.unique(np.transpose(np.asarray(coordsParam))[i,:]).size, )
+                        else:
+                            shape += (np.unique(np.transpose(np.asarray(coordsParam))[i,:]).size, )
+                            
+                    shape += tuple([axis.shape[0] for axis in coords[-5:]])
+                    data = dask.array.reshape(data, shape=shape)
+                    coordsDir = []
+                    for i in range(np.transpose(np.asarray(coordsParam))[:,0].size):
+                        coordsDir.append(np.unique(np.transpose(np.asarray(coordsParam))[i,:]))
+                    coords = coordsDir + coords
             else:
-                dims = [sweepName, 'wavetype', 't', 'z', 'y', 'x', 'comp']
-                coords = [coordsParam, np.array(wavetype), np.array([mesh.tmax]), mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
-                shape = (1, ) + tuple([axis.shape[0] for axis in coords[3:]])
-                for dir in dirListToConcat:
-                    if (data is None):
-                        subData = None
-                        for type in wavetype:
-                            if (subData is None):
-                                subData = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype), 0)
-                            else:
-                                newSubData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype)
-                                subData = dask.array.concatenate((subData, dask.array.expand_dims(newSubData, 0)), axis=0)
-                        data = dask.array.expand_dims(subData, 0)
-                    else:
-                        subData = None
-                        for type in wavetype:
-                            if (subData is None):
-                                subData = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype), 0)
-                            else:
-                                newSubData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype)
-                                subData = dask.array.concatenate((subData, dask.array.expand_dims(newSubData, 0)), axis=0)
-                        data = dask.array.concatenate((data, dask.array.expand_dims(subData, 0)), axis=0)
+                if (isinstance(sweepName, str)):
+                    dims = [sweepName, 'wavetype', 't', 'z', 'y', 'x', 'comp']
+                    coords = [coordsParam, np.array(wavetype), np.array([mesh.tmax]), mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
+                    shape = (1, ) + tuple([axis.shape[0] for axis in coords[3:]])
+                    for dir in dirListToConcat:
+                        if (data is None):
+                            subData = None
+                            for type in wavetype:
+                                if (subData is None):
+                                    subData = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype), 0)
+                                else:
+                                    newSubData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype)
+                                    subData = dask.array.concatenate((subData, dask.array.expand_dims(newSubData, 0)), axis=0)
+                            data = dask.array.expand_dims(subData, 0)
+                        else:
+                            subData = None
+                            for type in wavetype:
+                                if (subData is None):
+                                    subData = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype), 0)
+                                else:
+                                    newSubData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype)
+                                    subData = dask.array.concatenate((subData, dask.array.expand_dims(newSubData, 0)), axis=0)
+                            data = dask.array.concatenate((data, dask.array.expand_dims(subData, 0)), axis=0)
+                else:
+                    dims = sweepName + ['wavetype', 't', 'z', 'y', 'x', 'comp']
+                    coords = [np.array(wavetype), np.array([mesh.tmax]), mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
+                    shape = (1, ) + tuple([axis.shape[0] for axis in coords[2:]])
+                    data = None
+                    for dir in dirListToConcat:
+                        if (data is None):
+                            subData = None
+                            for type in wavetype:
+                                if (subData is None):
+                                    subData = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype), 0)
+                                else:
+                                    newSubData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype)
+                                    subData = dask.array.concatenate((subData, dask.array.expand_dims(newSubData, 0)), axis=0)
+                            data = dask.array.expand_dims(subData, 0)
+                        else:
+                            subData = None
+                            for type in wavetype:
+                                if (subData is None):
+                                    subData = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype), 0)
+                                else:
+                                    newSubData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype)
+                                    subData = dask.array.concatenate((subData, dask.array.expand_dims(newSubData, 0)), axis=0)
+                            data = dask.array.concatenate((data, dask.array.expand_dims(subData, 0)), axis=0)
+                    shape = None
+                    for i in range(np.transpose(np.asarray(coordsParam))[:,0].size):
+                        if shape == None:
+                            shape = (np.unique(np.transpose(np.asarray(coordsParam))[i,:]).size, )
+                        else:
+                            shape += (np.unique(np.transpose(np.asarray(coordsParam))[i,:]).size, )
+                            
+                    shape += tuple([axis.shape[0] for axis in coords[-6:]])
+                    data = dask.array.reshape(data, shape=shape)
+                    coordsDir = []
+                    for i in range(np.transpose(np.asarray(coordsParam))[:,0].size):
+                        coordsDir.append(np.unique(np.transpose(np.asarray(coordsParam))[i,:]))
+                    coords = coordsDir + coords
+
         #print(str(mesh.tmax) + filename_or_obj.stem)
         dset = xr.DataArray(data, dims=dims, coords=coords).to_dataset(name="raw")
         dset.attrs["cellsize"] = mesh.cellsize
@@ -207,7 +323,7 @@ class OvfEngine(xr.backends.BackendEntrypoint):
         return MumaxMesh(filename, nodes, world_min, world_max, tmax, n_comp, footer_dict)
     
     @dask.delayed
-    def read_data_from_ovf(self, filename, mesh=None, dtype=np.float32, type=''):
+    def read_data_from_ovf(self, filename, mesh=None, dtype=np.float32, type='') -> np.array:
         filename = Path(filename)
         if (type != ''):
             filename = filename.parent.joinpath(Path(type + str(filename.name)[re.search(r"\d", filename.stem).start():]))
