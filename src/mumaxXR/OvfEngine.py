@@ -8,6 +8,9 @@ import sys
 import os
 from forbiddenfruit import curse
 import warnings
+from typing import Tuple, Union
+from tqdm import tqdm
+from itertools import islice
 
 class custom_string():
     def replace_substring_at_nth(self, oldSubstring, newSubstring="", n=-1, count=-1):
@@ -34,11 +37,24 @@ class custom_string():
         except:
             self = str(self)
         return self
+    def castable_int(self):
+        try:
+            int(self)
+            return True
+        except ValueError:
+            return False
+        
+    def return_index_before_int(self):
+        for char in list(self):
+            if (custom_string.castable_int(char) == True):
+                return list(self).index(char) -1
 
 def castableList(inputList):
     try:
-        list(inputList)
-        return True
+        if (len(list(inputList)) > 1):
+            return True
+        else:
+            return False
     except TypeError:
         return False
 
@@ -68,6 +84,8 @@ curse(str, "check_upper_available", custom_string.check_upper_available)
 curse(str, "check_lower_available", custom_string.check_lower_available)
 curse(str, "replace_substring_at_nth", custom_string.replace_substring_at_nth)
 curse(str, "cast_toFloatExceptString", custom_string.cast_toFloatExceptString)
+curse(str, "return_index_before_int", custom_string.return_index_before_int)
+
 
 curse(list, "isinstance_recursive", custom_list.isinstance_recursive)
 curse(list, "is_homogenious", custom_list.is_homogenious)
@@ -112,22 +130,23 @@ class OvfEngine(xr.backends.BackendEntrypoint):
         wavetype=[],
         dirListToConcat=[],
         sweepName='',
-        sweepParam=[]
+        sweepParam=[],
+        disableProgressbar=False
     ):
         filename_or_obj = Path(filename_or_obj)
         coordsParam = None
         if (len(dirListToConcat) > 0):
-            dirListToConcat = [Path(dir) for dir in dirListToConcat]
-            if (filename_or_obj.parent not in dirListToConcat):
-                dirListToConcat = [filename_or_obj.parent] + dirListToConcat
+            dirListToConcat = [Path(ovfFile) for ovfFile in dirListToConcat]
+            if (filename_or_obj not in dirListToConcat):
+                dirListToConcat = [filename_or_obj] + dirListToConcat
             if (sweepName == ''):
                 sweepName = "unknown"
             if (isinstance(sweepParam, list)):
                 if (len(sweepParam) > 0 and isinstance(sweepParam, (float, int))):
                     if (len(sweepParam) == len(dirListToConcat)):
                         coordsParam = np.array(sweepParam)
-                    else:
-                        coordsParam = np.array(range(len(dirListToConcat)))
+                elif (len(sweepParam) == 0):
+                    coordsParam = np.array(range(len(dirListToConcat)))
                 elif (len(sweepParam) > 0 and sweepParam.isinstance_recursive((int, float)) and sweepParam.is_homogenious()):
                     coordsParam = [np.array(param) for param in sweepParam]
                     if (len(sweepName) != len(list(sweepParam[0])) or not isinstance(sweepName, (list, tuple))):
@@ -146,8 +165,21 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                     dirListToConcat = [dirListToConcat[i] for i in sortIndices]
                 else:
                     raise ValueError('Provided coords are not homogenious. Tuples or lists in list must be the same size for all entries.')
-
+        startingFileName = ''
+        if (dirListToConcat[0].suffix != '.ovf'):
+            ovfFilesList = [Path(file).name for file in sorted(list(dirListToConcat[0].glob('**/*000000.ovf')))]
+            if ('m000000.ovf' in ovfFilesList):
+                startingFileName = 'm000000.ovf'
+            elif ('u000000.ovf' in ovfFilesList):
+                startingFileName = 'u000000.ovf'
+            else:
+                raise ValueError('Could not find standart m or u ovf file in directory. Please pass wirst ovf file directly into xarray.')
+        else:
+            startingFileName = dirListToConcat[0].name
+        if (filename_or_obj.suffix != '.ovf'):
+            filename_or_obj = filename_or_obj.joinpath(Path(startingFileName))
         mesh = self.read_mesh_from_ovf(filename_or_obj)
+        #tmaxArray = dask.array.from_delayed(self.read_t_from_ovf(filename_or_obj), shape=(len(sorted(list(Path(filename_or_obj).parent.glob('**/' + Path(filename_or_obj).stem[Path(filename_or_obj).stem.return_index_before_int()] + '*.ovf')))), ), dtype=np.float32)
         dims = None
         coords = None
         shape = None
@@ -155,41 +187,48 @@ class OvfEngine(xr.backends.BackendEntrypoint):
         if (len(dirListToConcat) == 0):
             if (len(wavetype) == 0):
                 dims = ['t', 'z', 'y', 'x', 'comp']
-                coords = [np.array([mesh.tmax]), mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
-                shape = (1, ) + tuple([axis.shape[0] for axis in coords[1:]])
-                data = dask.array.from_delayed(self.read_data_from_ovf(filename_or_obj, dtype=dtype, mesh=mesh), shape=shape, dtype=dtype)
+                data, tmaxArray = self.read_data_from_ovf(filename_or_obj, dtype=dtype, mesh=mesh, returnTData=True)
+                coords = [tmaxArray, mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
             else:
                 dims = ['wavetype', 't', 'z', 'y', 'x', 'comp']
-                coords = [np.array(wavetype), np.array([mesh.tmax]), mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
-                shape = (1, ) + tuple([axis.shape[0] for axis in coords[2:]])
-                for type in wavetype:
+                for type in tqdm(wavetype, disable=disableProgressbar):
                     if (data is None):
-                        data = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(filename_or_obj, dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype), 0)
+                        data, tmaxArray = self.read_data_from_ovf(filename_or_obj, dtype=dtype, mesh=mesh, type=type, returnTData=True)
+                        data = dask.array.expand_dims(data, 0)
                     else:
-                        newData = dask.array.from_delayed(self.read_data_from_ovf(filename_or_obj, dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype)
+                        newData = self.read_data_from_ovf(filename_or_obj, dtype=dtype, mesh=mesh, type=type)
                         data = dask.array.concatenate((data, dask.array.expand_dims(newData, 0)), axis=0)
+                coords = [np.array(wavetype), tmaxArray, mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
         else:
             if (len(wavetype) == 0):
                 if (isinstance(sweepName, str)):
                     dims = [sweepName, 't', 'z', 'y', 'x', 'comp']
-                    coords = [coordsParam, np.array([mesh.tmax]), mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
-                    shape = (1, ) + tuple([axis.shape[0] for axis in coords[2:]])
-                    for dir in dirListToConcat:
+                    for dir in tqdm(dirListToConcat, disable=disableProgressbar):
                         if (data is None):
-                            data = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh), shape=shape, dtype=dtype), 0)
+                            if (dir.suffix != '.ovf'):
+                                dir = dir.joinpath(Path(startingFileName))
+                            data, tmaxArray = self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh, returnTData=True)
+                            data = dask.array.expand_dims(data, 0)
                         else:
-                            newData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh), shape=shape, dtype=dtype)
+                            if (dir.suffix != '.ovf'):
+                                dir = dir.joinpath(Path(startingFileName))
+                            newData = self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh)
                             data = dask.array.concatenate((data, dask.array.expand_dims(newData, 0)), axis=0)
+                    coords = [coordsParam, tmaxArray, mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
                 else:
                     dims = sweepName + ['t', 'z', 'y', 'x', 'comp']
-                    coords = [np.array([mesh.tmax]), mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
-                    shape = (1, ) + tuple([axis.shape[0] for axis in coords])
-                    for dir in dirListToConcat:
+                    for dir in tqdm(dirListToConcat, disable=disableProgressbar):
                         if (data is None):
-                            data = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh), shape=shape, dtype=dtype), 0)
+                            if (dir.suffix != '.ovf'):
+                                dir = dir.joinpath(Path(startingFileName))                                
+                            data, tmaxArray = self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh, returnTData=True)
+                            data = dask.array.expand_dims(data, 0)
                         else:
-                            newData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh), shape=shape, dtype=dtype)
+                            if (dir.suffix != '.ovf'):
+                                dir = dir.joinpath(Path(startingFileName))
+                            newData = self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh)
                             data = dask.array.concatenate((data, dask.array.expand_dims(newData, 0)), axis=0)
+                    
                     shape = None
                     for i in range(np.transpose(np.asarray(coordsParam))[:,0].size):
                         if shape == None:
@@ -197,8 +236,9 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                         else:
                             shape += (np.unique(np.transpose(np.asarray(coordsParam))[i,:]).size, )
                             
-                    shape += tuple([axis.shape[0] for axis in coords[-5:]])
-                    data = dask.array.reshape(data, shape=shape)
+                    coords = [tmaxArray, mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
+                    shape += tuple([axis.shape[0] for axis in coords])
+                    data = dask.array.reshape(data, shape=shape).rechunk(tuple(reversed([sc if list(reversed(list(shape))).index(sc) < 3 else 1 for sc in list(reversed(list(shape)))])))
                     coordsDir = []
                     for i in range(np.transpose(np.asarray(coordsParam))[:,0].size):
                         coordsDir.append(np.unique(np.transpose(np.asarray(coordsParam))[i,:]))
@@ -206,60 +246,75 @@ class OvfEngine(xr.backends.BackendEntrypoint):
             else:
                 if (isinstance(sweepName, str)):
                     dims = [sweepName, 'wavetype', 't', 'z', 'y', 'x', 'comp']
-                    coords = [coordsParam, np.array(wavetype), np.array([mesh.tmax]), mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
-                    shape = (1, ) + tuple([axis.shape[0] for axis in coords[3:]])
-                    for dir in dirListToConcat:
+                    for dir in tqdm(dirListToConcat):
                         if (data is None):
+                            if (dir.suffix != '.ovf'):
+                                dir = dir.joinpath(Path(startingFileName))
                             subData = None
-                            for type in wavetype:
+                            for type in tqdm(wavetype, leave=False):
                                 if (subData is None):
-                                    subData = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype), 0)
+                                    subData, tmaxArray = self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh, type=type, returnTData=True)
+                                    subData = dask.array.expand_dims(subData, 0)
                                 else:
-                                    newSubData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype)
+                                    newSubData = self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh, type=type)
                                     subData = dask.array.concatenate((subData, dask.array.expand_dims(newSubData, 0)), axis=0)
                             data = dask.array.expand_dims(subData, 0)
                         else:
+                            if (dir.suffix != '.ovf'):
+                                dir = dir.joinpath(Path(startingFileName))
                             subData = None
-                            for type in wavetype:
+                            for type in tqdm(wavetype, leave=False):
                                 if (subData is None):
-                                    subData = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype), 0)
+                                    subData = dask.array.expand_dims(self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh, type=type), 0)
                                 else:
-                                    newSubData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype)
+                                    newSubData = self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh, type=type)
                                     subData = dask.array.concatenate((subData, dask.array.expand_dims(newSubData, 0)), axis=0)
                             data = dask.array.concatenate((data, dask.array.expand_dims(subData, 0)), axis=0)
+                    coords = [coordsParam, np.array(wavetype), tmaxArray, mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
                 else:
                     dims = sweepName + ['wavetype', 't', 'z', 'y', 'x', 'comp']
-                    coords = [np.array(wavetype), np.array([mesh.tmax]), mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
-                    shape = (1, ) + tuple([axis.shape[0] for axis in coords[2:]])
                     data = None
-                    for dir in dirListToConcat:
+                    for dir in tqdm(dirListToConcat):
                         if (data is None):
-                            subData = None
-                            for type in wavetype:
-                                if (subData is None):
-                                    subData = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype), 0)
+                            if (dir.suffix != '.ovf'):
+                                ovfFilesList = [Path(file).name for file in sorted(list(dir.glob('**/*000000.ovf')))]
+                                if ('m000000.ovf' in ovfFilesList):
+                                    dir = dir.joinpath(Path('m000000.ovf'))
+                                elif ('u000000.ovf' in ovfFilesList):
+                                    dir = dir.joinpath(Path('u000000.ovf'))
                                 else:
-                                    newSubData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype)
+                                    raise ValueError('Could not find standart m or u ovf file in directory. Please pass wirst ovf file directly into xarray.')
+                            subData = None
+                            for type in tqdm(wavetype, leave=False):
+                                if (subData is None):
+                                    subData, tmaxArray = self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh, type=type, returnTData=True)
+                                    subData = dask.array.expand_dims(subData, 0)
+                                else:
+                                    newSubData = self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh, type=type)
                                     subData = dask.array.concatenate((subData, dask.array.expand_dims(newSubData, 0)), axis=0)
                             data = dask.array.expand_dims(subData, 0)
                         else:
+                            if (dir.suffix != '.ovf'):
+                                dir = dir.joinpath(Path(dirListToConcat[dirListToConcat.index(dir)-1]).name)
                             subData = None
-                            for type in wavetype:
+                            for type in tqdm(wavetype, leave=False):
                                 if (subData is None):
-                                    subData = dask.array.expand_dims(dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype), 0)
+                                    subData = dask.array.expand_dims(self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh, type=type), 0)
                                 else:
-                                    newSubData = dask.array.from_delayed(self.read_data_from_ovf(dir.joinpath(filename_or_obj.name), dtype=dtype, mesh=mesh, type=type), shape=shape, dtype=dtype)
+                                    newSubData = self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh, type=type)
                                     subData = dask.array.concatenate((subData, dask.array.expand_dims(newSubData, 0)), axis=0)
                             data = dask.array.concatenate((data, dask.array.expand_dims(subData, 0)), axis=0)
+                    
                     shape = None
                     for i in range(np.transpose(np.asarray(coordsParam))[:,0].size):
                         if shape == None:
                             shape = (np.unique(np.transpose(np.asarray(coordsParam))[i,:]).size, )
                         else:
                             shape += (np.unique(np.transpose(np.asarray(coordsParam))[i,:]).size, )
-                            
+
+                    coords = [np.array(wavetype), tmaxArray, mesh.get_axis(2), mesh.get_axis(1), mesh.get_axis(0), np.arange(mesh.n_comp)]
                     shape += tuple([axis.shape[0] for axis in coords[-6:]])
-                    data = dask.array.reshape(data, shape=shape)
+                    data = dask.array.reshape(data, shape=shape).rechunk(tuple(reversed([sc if list(reversed(list(shape))).index(sc) < 3 else 1 for sc in list(reversed(list(shape)))])))
                     coordsDir = []
                     for i in range(np.transpose(np.asarray(coordsParam))[:,0].size):
                         coordsDir.append(np.unique(np.transpose(np.asarray(coordsParam))[i,:]))
@@ -274,7 +329,6 @@ class OvfEngine(xr.backends.BackendEntrypoint):
         dset.attrs["n_comp"] = mesh.n_comp
         dset.attrs["n_cells"] = mesh.number_of_cells
         return dset
-
 
     def read_mesh_from_ovf(self, filename):
         file = open(filename, "rb")
@@ -322,35 +376,94 @@ class OvfEngine(xr.backends.BackendEntrypoint):
         file.close()
         return MumaxMesh(filename, nodes, world_min, world_max, tmax, n_comp, footer_dict)
     
-    @dask.delayed
-    def read_data_from_ovf(self, filename, mesh=None, dtype=np.float32, type='') -> np.array:
-        filename = Path(filename)
+    def read_data_from_ovf(self, filename, mesh=None, dtype=np.float32, returnTData=False, type='') -> Union[Tuple[dask.array.Array, dask.array.Array], dask.array.Array]:
         if (type != ''):
             filename = filename.parent.joinpath(Path(type + str(filename.name)[re.search(r"\d", filename.stem).start():]))
-        file = open(filename, "rb")
-        n_comp = mesh.n_comp
+        fileList = sorted(list(Path(filename).parent.glob('**/' + Path(filename).stem[Path(filename).stem.return_index_before_int()] + '*.ovf')))
 
-        if not _binary == 4:
-            raise ValueError('Error: Unknown binary type assigned for reading in .ovf2 data')
+        data = None
+        tData = []
 
-        data_start_pos = 0
+        def get_line_index_t_from_ovf(filename) -> int:
+            file = open(filename, "rb")
+            for i in range(0, 27):
+                line = file.readline()
+                # clean up
+                line = line.replace(b'# ', b'')
+                line = line.replace(b'Desc: Total simulation time: ', b'tmax: ')
+                line = line.replace(b'Desc: Time (s) : ', b'tmax: ')
+                if ('tmax' in line.decode()):
+                    return i
+            return -1
+            
+        def read_t_from_ovf(filename, lineIndex) -> float:
+            file = open(filename, "rb")
+            footer_dict = dict()
+            # discard headline
+            line = list(islice(file, lineIndex, lineIndex+1))[0]
+            line = line.replace(b'# ', b'')
+            line = line.replace(b'Desc: Total simulation time: ', b'tmax: ')
+            line = line.replace(b'Desc: Time (s) : ', b'tmax: ')
+            attr, val = line.split(b': ')
+            footer_dict[attr] = val.replace(b"\n", b"")
+            if b' s' in footer_dict[b"tmax"]:
+                tmax_string, _ = footer_dict[b"tmax"].split(b' s')
+            else:
+                tmax_string = footer_dict[b"tmax"]
+            return float(tmax_string)
 
-        for i in range(0, 46):
-            line = file.readline()
-            if b'# Begin: Data' in line:
-                # the first binary number is a control number specified in the ovf format
-                file.read(_binary)
-                data_start_pos = file.tell()
-                break
-            if (i == 45):
-                raise ValueError("Error: %s has no well formatted data segment." % filename)
+        @dask.delayed
+        def create_delayedArray(filename, mesh, dtype) -> np.array:
+            filename = Path(filename)
+            file = open(filename, "rb")
+            n_comp = mesh.n_comp
 
-        file.seek(data_start_pos, 0)
-        size = int(n_comp * mesh.number_of_cells * _binary / 4)
-        data = np.fromfile(file, dtype=dtype, count=size)
-        data = np.expand_dims(data.reshape(mesh.nodes[2], mesh.nodes[1], mesh.nodes[0], n_comp), 0)
-        file.close()
-        return data
+            if not _binary == 4:
+                raise ValueError('Error: Unknown binary type assigned for reading in .ovf2 data')
+
+            data_start_pos = 0
+
+            for i in range(0, 46):
+                line = file.readline()
+                if b'# Begin: Data' in line:
+                    # the first binary number is a control number specified in the ovf format
+                    file.read(_binary)
+                    data_start_pos = file.tell()
+                    break
+                if (i == 45):
+                    raise ValueError("Error: %s has no well formatted data segment." % filename)
+
+            file.seek(data_start_pos, 0)
+            size = int(n_comp * mesh.number_of_cells * _binary / 4)
+            data = np.fromfile(file, dtype=dtype, count=size)
+            data = data.reshape(mesh.nodes[2], mesh.nodes[1], mesh.nodes[0], n_comp)
+            file.close()
+            return data
+        
+        if returnTData == True:
+            lineIndex = get_line_index_t_from_ovf(fileList[0])
+            if (lineIndex == -1):
+                raise ValueError('Could not find time in ovf file.')
+            for filename in fileList:
+                tData.append(read_t_from_ovf(filename, lineIndex))
+
+        @dask.delayed
+        def create_concatenatedArray(fileList, mesh, dtype) -> dask.array.Array: 
+            data = None
+            for filename in fileList:
+                tmpData = dask.array.expand_dims(dask.array.from_delayed(create_delayedArray(filename, mesh, dtype), shape=(mesh.nodes[2], mesh.nodes[1], mesh.nodes[0], mesh.n_comp), dtype=np.float32), 0)
+                if (data is None):
+                    data = tmpData
+                else:
+                    data = dask.array.concatenate((data, tmpData), axis=0)
+            return data
+
+        data = dask.array.from_delayed(create_concatenatedArray(fileList, mesh, dtype), shape=(len(fileList), mesh.nodes[2], mesh.nodes[1], mesh.nodes[0], mesh.n_comp), dtype=dtype)
+        data = data.rechunk((1, mesh.nodes[2], mesh.nodes[1], mesh.nodes[0], mesh.n_comp))
+        if returnTData == True:
+            return data, np.array(tData)
+        else:
+            return data
     
 def convert_TableFile_to_dataset(tableTxtFilePath):
     tableArrayVec = None
