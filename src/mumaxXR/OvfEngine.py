@@ -305,7 +305,6 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                     def concat_data(wavetype, dirListToConcat, startingFileName, dtype, mesh) -> dask.array.Array:
                         data = None
                         for dir in dirListToConcat:
-                            print(dir)
                             if (data is None):
                                 if (dir.suffix != '.ovf'):
                                     dir = dir.joinpath(Path(startingFileName))
@@ -329,7 +328,6 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                                         newSubData = self.read_data_from_ovf(dir, dtype=dtype, mesh=mesh, type=type)
                                         subData = dask.array.concatenate((subData, dask.array.expand_dims(newSubData, 0)), axis=0)
                                 data = dask.array.concatenate((data, dask.array.expand_dims(subData, 0)), axis=0)
-                        print('Done')
                         return data
                         
                     shape = None

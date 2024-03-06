@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: mumaxxr
-Version: 0.0.6
+Version: 0.0.7
 Summary: xarray engine to load ovf files from mumax simulations into xarray
 Author-email: Tim Vogel <tim.vogel@physik.uni-kl.de>
 Project-URL: Homepage, https://github.com/timvgl/mumaxXR/
