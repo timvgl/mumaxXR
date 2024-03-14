@@ -1,17 +1,3 @@
-Metadata-Version: 2.1
-Name: mumaxxr
-Version: 0.0.12
-Summary: xarray engine to load ovf files from mumax simulations into xarray
-Author-email: Tim Vogel <tim.vogel@physik.uni-kl.de>
-Project-URL: Homepage, https://github.com/timvgl/mumaxXR/
-Project-URL: Issues, https://github.com/timvgl/mumaxXR/issues
-Classifier: Programming Language :: Python :: 3
-Classifier: License :: OSI Approved :: MIT License
-Classifier: Operating System :: OS Independent
-Requires-Python: >=3.8
-Description-Content-Type: text/x-rst
-License-File: LICENSE
-
 mumaxXR contains an engine for xarray to read output directories of mumax directly, lazily into xarray.
 Therefore, the class OvfEngine needs to be imported from mumaxXR. Simply pass the directory, or an ovf file (e.g. m000000.ovf) as the filename_or_obj argument to the method.
 If only the directory is specified, the engine tries to find magnetization ovf files. If no magnetization ovf files are found the engine tries to load displacement ovf files.

@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mumaxxr"
-version = "0.0.7"
+version = "0.0.12"
 authors = [
   { name="Tim Vogel", email="tim.vogel@physik.uni-kl.de" },
 ]
 description = "xarray engine to load ovf files from mumax simulations into xarray"
-readme = "README.md"
+readme = "README.rst"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",

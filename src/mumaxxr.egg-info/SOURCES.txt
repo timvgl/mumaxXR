@@ -1,4 +1,5 @@
 LICENSE
+README.rst
 pyproject.toml
 src/mumaxXR/OvfEngine.py
 src/mumaxXR/__init__.py
