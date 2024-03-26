@@ -6,6 +6,7 @@ The engine has to be passed to xarray as engine=OvfEngine. Set chunks='auto' in 
 that each ovf file has to be accessed multiple times, if the chunks for the dimensions x, y, z and comp are not set the default values.
 
 .. code-block:: python
+
     from mumaxXR import OvfEngine
     dataset = xr.open_dataset(example_mumax_output_dir, chunks='auto', engine=OvfEngine)
 
