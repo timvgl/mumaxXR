@@ -6,7 +6,7 @@ The engine has to be passed to xarray as engine=OvfEngine. Set chunks='auto' in 
 that each ovf file has to be accessed multiple times, if the chunks for the dimensions x, y, z and comp are not set the default values.
 
 .. code-block:: python
-
+    from mumaxXR import OvfEngine
     dataset = xr.open_dataset(example_mumax_output_dir, chunks='auto', engine=OvfEngine)
 
 If multiple kinds of ovf files have been stored in the same time steps, another argument 'wavetype' can be passed to open_dataset, containing a list of the other short names, e.g.,
@@ -18,7 +18,9 @@ If multiple kinds of ovf files have been stored in the same time steps, another 
 Keep in mind that the names passed to wavetype have to be exactly like the prefix of ovf files. 
 
 If multiple simulation directories are supposed to be concatenated, multiple mumax simulation directories can be passed to the engine.
-The number of ovf files has to be the same. This is meant for concatenating simulations of parameter sweeps.
+If the number of ovf-files in the directories is not the same, the data is going to be interpolated lineariliy towards the time scaling, of the major mumax-directory.
+Please notice that this only makes sense, if the simulations did not crash or were interrupted in another way.
+This is meant for concatenating simulations of parameter sweeps.
 For 1D concatenation simply pass the parameter values inside a list to the engine.
 
 .. code-block:: python
