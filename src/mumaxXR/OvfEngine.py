@@ -9,6 +9,8 @@ from forbiddenfruit import curse
 import warnings
 from typing import Tuple, Union
 from itertools import islice
+from copy import deepcopy
+from packaging.version import Version
 
 class custom_string():
     def replace_substring_at_nth(self, oldSubstring, newSubstring="", n=-1, count=-1):
@@ -129,7 +131,10 @@ class OvfBackendArray(xr.backends.BackendArray):
         sweepName='',
         sweepParam=[],
         removeOvfFiles=False,
-        useEachNthOvfFile=0
+        useEachNthOvfFile=0,
+        singleLoad=False,
+        t=None,
+        sc=False
     ):
         self.filename_or_obj = filename_or_obj
         self.dtype = dtype
@@ -141,7 +146,9 @@ class OvfBackendArray(xr.backends.BackendArray):
         self.removeOvfFiles = removeOvfFiles
         self.useEachNthOvfFile = useEachNthOvfFile
         self.useEachList = []
-        self.tmaxArray = None
+        self.tmaxArray = t
+        self.singleLoad = singleLoad
+        self.sc = sc
         self.fileList = self.generate_array_file_link()
     
     def __getitem__(self, key: tuple):
@@ -186,6 +193,7 @@ class OvfBackendArray(xr.backends.BackendArray):
                     self.dirListToConcat = [self.dirListToConcat[i] for i in sortIndices]
                 else:
                     raise ValueError('Provided coords are not homogenious. Tuples or lists in list must be the same size for all entries.')
+                
         startingFileName = ''
         if (len(self.dirListToConcat) > 0):
             if (self.dirListToConcat[0].suffix != '.ovf'):
@@ -202,6 +210,93 @@ class OvfBackendArray(xr.backends.BackendArray):
                 startingFileName = self.dirListToConcat[0].name
             if (self.filename_or_obj.suffix != '.ovf'):
                 self.filename_or_obj = self.filename_or_obj.joinpath(Path(startingFileName))
+        else:
+            if (self.filename_or_obj.suffix != '.ovf'):
+                ovfFilesList = [Path(file).name for file in sorted(list(self.filename_or_obj.glob('**/*000000.ovf')))]
+                if (len(self.wavetype) > 0 and Path(self.wavetype[0] + '000000.ovf').is_file()):
+                    startingFileName = self.wavetype[0] + '000000.ovf'
+                elif (len(self.wavetype) > 0):
+                    ovfFilesList = [Path(file).name for file in sorted(list(self.filename_or_obj.glob('**/' + self.wavetype[0] + '*.ovf')))]
+                    startingFileName = ovfFilesList[0]
+                elif ('m000000.ovf' in ovfFilesList):
+                    startingFileName = 'm000000.ovf'
+                elif ('u000000.ovf' in ovfFilesList):
+                    startingFileName = 'u000000.ovf'
+                elif len(ovfFilesList) > 0:
+                    startingFileName = ovfFilesList[0]
+                else:
+                    raise FileExistsError('Amigous which file to use for starting ...')
+                self.filename_or_obj = self.filename_or_obj.joinpath(Path(startingFileName))
+        self.mesh = self.read_mesh_from_ovf(self.filename_or_obj)
+        if (len(self.wavetype) > 0):
+            matchingTypes = []
+            for elem in self.wavetype:
+                if (elem in self.filename_or_obj.name):
+                    matchingTypes.append(elem)
+            replaceString = matchingTypes[np.argmax([len(elem) for elem in matchingTypes])]
+            removeWT = []
+            replaceOrgName = False
+            for elem in self.wavetype:
+                mesh = self.read_mesh_from_ovf(self.filename_or_obj.parent.joinpath(self.filename_or_obj.name.replace(replaceString, elem)))
+                if (self.sc == True):
+                    if mesh.n_comp != 1:
+                        removeWT.append(elem)
+                        if (replaceString in self.filename_or_obj.name):
+                            replaceOrgName = True
+                else:
+                    if mesh.n_comp != 3:
+                        removeWT.append(elem)
+                        if (replaceString in self.filename_or_obj.name):
+                            replaceOrgName = True
+            for elem in removeWT:
+                self.wavetype.remove(elem)
+            if (replaceOrgName == True and len(self.wavetype) > 0):
+                self.filename_or_obj = self.filename_or_obj.parent.joinpath(self.filename_or_obj.name.replace(replaceString, self.wavetype[0]))
+            if (len(self.wavetype) == 0):
+                self.shape = ()
+                self.dims = []
+                self.coords = []
+                return np.asarray([])
+        else:
+            if self.read_mesh_from_ovf(self.filename_or_obj).n_comp != 1 and self.sc == True or self.read_mesh_from_ovf(self.filename_or_obj).n_comp != 3 and self.sc == False:
+                self.shape = ()
+                self.dims = []
+                self.coords = []
+                return np.asarray([])
+            
+        startingFileName = ''
+        if (len(self.dirListToConcat) > 0):
+            if (self.dirListToConcat[0].suffix != '.ovf'):
+                ovfFilesList = [Path(file).name for file in sorted(list(self.dirListToConcat[0].glob('**/*000000.ovf')))]
+                if (len(self.wavetype) > 0):
+                    startingFileName = self.wavetype[0] + '000000.ovf'
+                elif ('m000000.ovf' in ovfFilesList):
+                    startingFileName = 'm000000.ovf'
+                elif ('u000000.ovf' in ovfFilesList):
+                    startingFileName = 'u000000.ovf'
+                else:
+                    startingFileName = ovfFilesList[0].name
+            else:
+                startingFileName = self.dirListToConcat[0].name
+            if (self.filename_or_obj.suffix != '.ovf'):
+                self.filename_or_obj = self.filename_or_obj.joinpath(Path(startingFileName))
+        else:
+            if (self.filename_or_obj.suffix != '.ovf'):
+                ovfFilesList = [Path(file).name for file in sorted(list(self.filename_or_obj.glob('**/*000000.ovf')))]
+                if (len(self.wavetype) > 0 and self.filename_or_obj.parent.joinpath(Path(self.wavetype[0] + '000000.ovf')).is_file()):
+                    startingFileName = self.wavetype[0] + '000000.ovf'
+                elif (len(self.wavetype) > 0):
+                    ovfFilesList = [Path(file).name for file in sorted(list(self.filename_or_obj.glob('**/' + self.wavetype[0] + '*.ovf')))]
+                    startingFileName = ovfFilesList[0]
+                elif ('m000000.ovf' in ovfFilesList):
+                    startingFileName = 'm000000.ovf'
+                elif ('u000000.ovf' in ovfFilesList):
+                    startingFileName = 'u000000.ovf'
+                elif len(ovfFilesList) > 0:
+                    startingFileName = ovfFilesList[0]
+                else:
+                    raise FileExistsError('Amigous which file to for starting ...')
+                self.filename_or_obj = self.filename_or_obj.joinpath(Path(startingFileName))
         self.mesh = self.read_mesh_from_ovf(self.filename_or_obj)
 
         dims = None
@@ -209,45 +304,75 @@ class OvfBackendArray(xr.backends.BackendArray):
         shape = None
         if (len(self.dirListToConcat) == 0):
             if (len(self.wavetype) == 0):
-                dims = ['t', 'z', 'y', 'x', 'comp']
-                fileList, self.tmaxArray = self.get_corresponding_files(self.filename_or_obj, returnTData=True)
-                coords = [self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
+                if self.sc == False:
+                    dims = ['t', 'z', 'y', 'x', 'comp']
+                else:
+                    dims = ['t', 'z', 'y', 'x']
+                if (self.tmaxArray is None):
+                    fileList, self.tmaxArray = self.get_corresponding_files(self.filename_or_obj, returnTData=True)
+                else:
+                    fileList[0] = self.get_corresponding_files(self.filename_or_obj, returnTData=False)
+                if self.sc == False:
+                    coords = [self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
+                else:
+                    coords = [self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0)]
                 shape = [value.size for value in coords]
                 fileList = np.asarray(fileList)
             else:
-                dims = ['wavetype', 't', 'z', 'y', 'x', 'comp']
+                if self.sc == False:
+                    dims = ['wavetype', 't', 'z', 'y', 'x', 'comp']
+                else:
+                    dims = ['wavetypeSc', 't', 'z', 'y', 'x']
                 fileList = [None]
-                fileList[0], self.tmaxArray = self.get_corresponding_files(self.filename_or_obj, type=self.wavetype[0], returnTData=True)
-
+                if (self.tmaxArray is None):
+                    fileList[0], self.tmaxArray = self.get_corresponding_files(self.filename_or_obj, type=self.wavetype[0], returnTData=True)
+                else:
+                    fileList[0] = self.get_corresponding_files(self.filename_or_obj, returnTData=False)
                 for type in self.wavetype[1:]:
                     fileList.append(self.get_corresponding_files(self.filename_or_obj, type=type))
-                
-                coords = [np.array(self.wavetype), self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
+                if self.sc == False:
+                    coords = [np.array(self.wavetype), self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
+                else:
+                    coords = [np.array(self.wavetype), self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0)]
                 shape = [value.size for value in coords]
                 fileList = np.asarray(fileList)
         else:
             if (len(self.wavetype) == 0):
                 if (isinstance(self.sweepName, str)):
-                    dims = [self.sweepName, 't', 'z', 'y', 'x', 'comp']
+                    if (self.sc == False):
+                        dims = [self.sweepName, 't', 'z', 'y', 'x', 'comp']
+                    else:
+                        dims = [self.sweepName, 't', 'z', 'y', 'x']
                     if (self.dirListToConcat[0].suffix != '.ovf'):
                         self.dirListToConcat[0] = self.dirListToConcat[0].joinpath(Path(startingFileName))
                     fileList = [None]
-                    fileList[0], self.tmaxArray = self.get_corresponding_files(self.dirListToConcat[0], returnTData=True)
+                    if (self.tmaxArray is None):
+                        fileList[0], self.tmaxArray = self.get_corresponding_files(self.dirListToConcat[0], returnTData=True)
+                    else:
+                        fileList[0] = self.get_corresponding_files(self.dirListToConcat[0], returnTData=False)
 
                     for dir in self.dirListToConcat[1:]:
                         if (dir.suffix != '.ovf'):
                             dir = dir.joinpath(Path(startingFileName))
                         fileList.append(self.get_corresponding_files(dir))
-                
-                    coords = [coordsParam, self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
+                    if (self.sc == False):
+                        coords = [coordsParam, self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
+                    else:
+                        coords = [coordsParam, self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0)]
                     shape = [value.size for value in coords]
                     fileList = np.asarray(fileList)
                 else:
-                    dims = self.sweepName + ['t', 'z', 'y', 'x', 'comp']
+                    if (self.sc == False):
+                        dims = self.sweepName + ['t', 'z', 'y', 'x', 'comp']
+                    else:
+                        dims = self.sweepName + ['t', 'z', 'y', 'x']
                     if (self.dirListToConcat[0].suffix != '.ovf'):
                         self.dirListToConcat[0] = self.dirListToConcat[0].joinpath(Path(startingFileName))
-                    fileList = [None]                            
-                    fileList[0], self.tmaxArray = self.get_corresponding_files(self.dirListToConcat[0], returnTData=True)
+                    fileList = [None]   
+                    if (self.tmaxArray is None):                         
+                        fileList[0], self.tmaxArray = self.get_corresponding_files(self.dirListToConcat[0], returnTData=True)
+                    else:
+                        fileList[0] = self.get_corresponding_files(self.dirListToConcat[0], returnTData=False)
 
                     for dir in self.dirListToConcat[1:]:
                         if (dir.suffix != '.ovf'):
@@ -260,21 +385,29 @@ class OvfBackendArray(xr.backends.BackendArray):
                             shape = (np.unique(np.transpose(np.asarray(coordsParam))[i,:]).size, )
                         else:
                             shape += (np.unique(np.transpose(np.asarray(coordsParam))[i,:]).size, )
-                            
-                    coords = [self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
+                    if (self.sc == False):
+                        coords = [self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
+                    else:
+                        coords = [self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0)]
                     shape += tuple([axis.shape[0] for axis in coords])
                     coordsDir = []
                     for i in range(np.transpose(np.asarray(coordsParam))[:,0].size):
                         coordsDir.append(np.unique(np.transpose(np.asarray(coordsParam))[i,:]))
                     coords = coordsDir + coords
-                    fileList = np.reshape(fileList, list(shape)[0:-4])
+                    if (self.sc == False):
+                        fileList = np.reshape(fileList, list(shape)[0:-4])
+                    else:
+                        fileList = np.reshape(fileList, list(shape)[0:-3])
             else:
                 if (isinstance(self.sweepName, str)):
-                    dims = [self.sweepName, 'wavetype', 't', 'z', 'y', 'x', 'comp']
+                    if (self.sc == False):
+                        dims = [self.sweepName, 'wavetype', 't', 'z', 'y', 'x', 'comp']
+                    else:
+                        dims = [self.sweepName, 'wavetypeSc', 't', 'z', 'y', 'x']
                     if (self.dirListToConcat[0].suffix != '.ovf'):
                         self.dirListToConcat[0] = self.dirListToConcat[0].joinpath(Path(startingFileName))
-                    self.tmaxArray = self.get_corresponding_files(self.dirListToConcat[0], returnTData=True, returnMeshData=False)
-
+                    if (self.tmaxArray is None):
+                        self.tmaxArray = self.get_corresponding_files(self.dirListToConcat[0], returnTData=True, returnMeshData=False)
                     for dir in self.dirListToConcat:
                         if (dir.suffix != '.ovf'):
                             dir = dir.joinpath(Path(startingFileName))
@@ -283,14 +416,21 @@ class OvfBackendArray(xr.backends.BackendArray):
                             subFileList.append(self.get_corresponding_files(dir, type=type))
                         fileList.append(subFileList)
 
-                    coords = [coordsParam, np.array(self.wavetype), self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
+                    if (self.sc == False):
+                        coords = [coordsParam, np.array(self.wavetype), self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
+                    else:
+                        coords = [coordsParam, np.array(self.wavetype), self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0)]
                     shape = [value.size for value in coords]
                     fileList = np.asarray(fileList)
                 else:
-                    dims = self.sweepName + ['wavetype', 't', 'z', 'y', 'x', 'comp']
+                    if (self.sc == False):
+                        dims = self.sweepName + ['wavetype', 't', 'z', 'y', 'x', 'comp']
+                    else:
+                        dims = self.sweepName + ['wavetypeSc', 't', 'z', 'y', 'x']
                     if (self.dirListToConcat[0].suffix != '.ovf'):
                         self.dirListToConcat[0] = self.dirListToConcat[0].joinpath(Path(startingFileName))
-                    self.tmaxArray = self.get_corresponding_files(self.dirListToConcat[0], returnTData=True, returnMeshData=False)
+                    if (self.tmaxArray is None):
+                        self.tmaxArray = self.get_corresponding_files(self.dirListToConcat[0], returnTData=True, returnMeshData=False)
 
                     for dir in self.dirListToConcat:
                         if (dir.suffix != '.ovf'):
@@ -306,14 +446,21 @@ class OvfBackendArray(xr.backends.BackendArray):
                         else:
                             shape += (np.unique(np.transpose(np.asarray(coordsParam))[i,:]).size, )
 
-                    coords = [np.array(self.wavetype), self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
-                    shape += tuple([axis.shape[0] for axis in coords[-6:]])
+                    if (self.sc == False):
+                        coords = [np.array(self.wavetype), self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
+                        shape += tuple([axis.shape[0] for axis in coords[-6:]])
+                    else:
+                        coords = [np.array(self.wavetype), self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0)]
+                        shape += tuple([axis.shape[0] for axis in coords[-5:]])
                     coordsDir = []
                     for i in range(np.transpose(np.asarray(coordsParam))[:,0].size):
                         coordsDir.append(np.unique(np.transpose(np.asarray(coordsParam))[i,:]))
                     coords = coordsDir + coords
                     try:
-                        fileList = np.reshape(fileList, list(shape)[0:-4])
+                        if (self.sc == False):
+                            fileList = np.reshape(fileList, list(shape)[0:-4])
+                        else:
+                            fileList = np.reshape(fileList, list(shape)[0:-3])
                     except:
                         print(fileList)
                         exit()
@@ -324,66 +471,72 @@ class OvfBackendArray(xr.backends.BackendArray):
         return fileList
     
     def _raw_indexing_method(self, key: tuple) -> np.ndarray:
-        filenames = self.fileList[tuple(list(key)[:-4])]
+        if self.sc == False:
+            negativeEnd = -4
+        else:
+            negativeEnd = -3
+        filenames = self.fileList[tuple(list(key)[:negativeEnd])]
+        if not isinstance(filenames, np.ndarray):
+            filenames = np.asarray([filenames])
         data = None
         for filename in filenames.flatten():
             if (not isinstance(filename, dict)):
                 if (data is None):
                     data = self.read_data_from_ovf(filename)
-                    if (data.shape == data[tuple(list(key)[-4:])].shape and self.removeOvfFiles == True):
+                    if (data.shape == data[tuple(list(key)[negativeEnd:])].shape and self.removeOvfFiles == True):
                         filename.unlink()
-                    data = data[tuple(list(key)[-4:])]
+                    data = data[tuple(list(key)[negativeEnd:])]
                     if (len(list(data.shape)) < len(list(key))):
                         for i in range(len(list(key))-len(list(data.shape))):
                             data = np.expand_dims(data, 0)
                 else:
                     newData = self.read_data_from_ovf(filename)
-                    if (newData.shape == newData[tuple(list(key)[-4:])].shape and self.removeOvfFiles == True):
+                    if (newData.shape == newData[tuple(list(key)[negativeEnd:])].shape and self.removeOvfFiles == True):
                         filename.unlink()
-                    newData = newData[tuple(list(key)[-4:])]
+                    newData = newData[tuple(list(key)[negativeEnd:])]
                     if (len(list(newData.shape)) < len(list(key))):
                         for i in range(len(list(key))-len(list(newData.shape))):
                             newData = np.expand_dims(newData, 0)
                     data = np.vstack((data, newData))
             else:
-                for key in filename.keys():
-                    if (not isinstance(filename[key], tuple)):
+                for keyInter in filename.keys():
+                    if (not isinstance(filename[keyInter], tuple)):
                         if (data is None):
-                            data = self.read_data_from_ovf(filename)
-                            data = data[tuple(list(key)[-4:])]
+                            data = self.read_data_from_ovf(filename[keyInter])
+                            data = data[tuple(list(key)[negativeEnd:])]
                             if (len(list(data.shape)) < len(list(key))):
                                 for i in range(len(list(key))-len(list(data.shape))):
                                     data = np.expand_dims(data, 0)
                         else:
-                            newData = self.read_data_from_ovf(filename)
-                            newData = newData[tuple(list(key)[-4:])]
+                            newData = self.read_data_from_ovf(filename[keyInter])
+                            newData = newData[tuple(list(key)[negativeEnd:])]
                             if (len(list(newData.shape)) < len(list(key))):
                                 for i in range(len(list(key))-len(list(newData.shape))):
                                     newData = np.expand_dims(newData, 0)
                             data = np.vstack((data, newData))
                     else:
                         if (data is None):
-                            dataBefore = self.read_data_from_ovf(filename[key][1])
-                            dataAfter = self.read_data_from_ovf(filename[key][3])
-                            dataSlope = (dataAfter - dataBefore) / (filename[key][2] - filename[key][0])
-                            data = dataBefore + dataSlope * (key[0] - filename[key][0])
-                            data = data[tuple(list(key)[-4:])]
+                            dataBefore = self.read_data_from_ovf(filename[keyInter][1])
+                            dataAfter = self.read_data_from_ovf(filename[keyInter][3])
+                            dataSlope = (dataAfter - dataBefore) / (filename[keyInter][2] - filename[keyInter][0])
+                            data = dataBefore + dataSlope * (keyInter[0] - filename[keyInter][0])
+                            data = data[tuple(list(key)[negativeEnd:])]
                             if (len(list(data.shape)) < len(list(key))):
                                 for i in range(len(list(key))-len(list(data.shape))):
                                     data = np.expand_dims(data, 0)
                         else:
-                            dataBefore = self.read_data_from_ovf(filename[key][1])
-                            dataAfter = self.read_data_from_ovf(filename[key][3])
-                            dataSlope = (dataAfter - dataBefore) / (filename[key][2] - filename[key][0])
-                            newData = dataBefore + dataSlope * (key[0] - filename[key][0])
-                            newData = newData[tuple(list(key)[-4:])]
+                            dataBefore = self.read_data_from_ovf(filename[keyInter][1])
+                            dataAfter = self.read_data_from_ovf(filename[keyInter][3])
+                            dataSlope = (dataAfter - dataBefore) / (filename[keyInter][2] - filename[keyInter][0])
+                            newData = dataBefore + dataSlope * (keyInter[0] - filename[keyInter][0])
+                            newData = newData[tuple(list(key)[negativeEnd:])]
                             if (len(list(newData.shape)) < len(list(key))):
                                 for i in range(len(list(key))-len(list(newData.shape))):
                                     newData = np.expand_dims(newData, 0)
                             data = np.vstack((data, newData))
 
 
-        data = np.reshape(data, filenames.shape + tuple(list(data.shape)[-4:]))
+        data = np.reshape(data, filenames.shape + tuple(list(data.shape)[negativeEnd:]))
         return data
 
     def read_mesh_from_ovf(self, filename):
@@ -448,22 +601,35 @@ class OvfBackendArray(xr.backends.BackendArray):
             with lock, open(filename, "rb") as file:
                 footer_dict = dict()
                 # discard headline
-                line = list(islice(file, lineIndex, lineIndex+1))[0]
-                line = line.replace(b'# ', b'')
-                line = line.replace(b'Desc: Total simulation time: ', b'tmax: ')
-                line = line.replace(b'Desc: Time (s) : ', b'tmax: ')
-                attr, val = line.split(b': ')
-                footer_dict[attr] = val.replace(b"\n", b"")
-                if b' s' in footer_dict[b"tmax"]:
-                    tmax_string, _ = footer_dict[b"tmax"].split(b' s')
-                else:
-                    tmax_string = footer_dict[b"tmax"]
-            return float(tmax_string)
+                try:
+                    line = list(islice(file, lineIndex, lineIndex+1))[0]
+                    line = line.replace(b'# ', b'')
+                    line = line.replace(b'Desc: Total simulation time: ', b'tmax: ')
+                    line = line.replace(b'Desc: Time (s) : ', b'tmax: ')
+                    attr, val = line.split(b': ')
+                    footer_dict[attr] = val.replace(b"\n", b"")
+                    if b' s' in footer_dict[b"tmax"]:
+                        tmax_string, _ = footer_dict[b"tmax"].split(b' s')
+                    else:
+                        tmax_string = footer_dict[b"tmax"]
+                    return float(tmax_string)
+                except IndexError:
+                    print('Found ovf file of not finished sim. Stopping from: ' + filename.name)
+                    return None
         
         tData = []
         if (type != ''):
-            filename = filename.parent.joinpath(Path(type + str(filename.name)[re.search(r"\d", filename.stem).start():]))
-        fileList = sorted(list(Path(filename).parent.glob('**/' + Path(filename).stem[Path(filename).stem.return_index_before_int()] + '*.ovf')))
+            try:
+                filename = filename.parent.joinpath(Path(type + str(filename.name)[re.search(r"\d", filename.stem).start():]))
+            except AttributeError:
+                pass
+        try:
+            if (self.singleLoad == False):
+                fileList = sorted(list(Path(filename).parent.glob('**/' + Path(filename).stem[:Path(filename).stem.return_index_before_int()+1] + '*.ovf')))
+            else:
+                raise TypeError
+        except TypeError:
+            fileList = [filename]
         if (self.useEachNthOvfFile != 0 and self.useEachNthOvfFile != 1):
             if (len(self.useEachList) == 0):
                 useIndices = list(range(0, len(fileList), self.useEachNthOvfFile))
@@ -486,10 +652,14 @@ class OvfBackendArray(xr.backends.BackendArray):
                 raise ValueError('Could not find time in ovf file.')  
             
             for filename in fileList:
-                tData.append(read_t_from_ovf(filename, lineIndex, self.lock))
+                tFrame = read_t_from_ovf(filename, lineIndex, self.lock)
+                if not tFrame is None:
+                    tData.append(tFrame)
+                else:
+                    break
 
             if (self.tmaxArray.size < len(fileList)):
-                print(filename.parent.__str__() + ' contains more ovf-files than expected. Interpolating to ' + str(self.tmaxArray.size) + ' timesteps ...')
+                print(filename.parents[0].__str__().replace(filename.parents[1].__str__(), '') + ' contains more ovf-files than expected. Interpolating to ' + str(self.tmaxArray.size) + ' timesteps ...')
                 interpolatedfileList = []
                 for i in range(self.tmaxArray.size):
                     nearest = list(find_nearest(tData, self.tmaxArray[i]))
@@ -501,7 +671,7 @@ class OvfBackendArray(xr.backends.BackendArray):
                         elif (nearest[3] == 'higher'):
                             interpolatedfileList.append({(self.tmaxArray[i]): (nearest[1], fileList[nearest[0]-1], nearest[2], fileList[nearest[0]])})
             elif (self.tmaxArray.size > len(fileList)):
-                print(filename.parent.__str__() + ' contains less ovf-files than expected. Interpolating to ' + str(self.tmaxArray.size) + ' timesteps ...')
+                print(filename.parents[0].__str__().replace(filename.parents[1].__str__(), '') + ' contains less ovf-files than expected. Interpolating to ' + str(self.tmaxArray.size) + ' timesteps ...')
                 for i in range(self.tmaxArray.size):
                     nearest = list(find_nearest(tData, self.tmaxArray[i]))
                     if (len(nearest) == 2):
@@ -550,13 +720,15 @@ class OvfBackendArray(xr.backends.BackendArray):
             file.seek(data_start_pos, 0)
             size = int(self.mesh.n_comp * self.mesh.number_of_cells * _binary / 4)
             data = np.fromfile(file, dtype=self.dtype, count=size)
-
-            data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp)
+            if (self.sc == False):
+                data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp)
+            else:
+                data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0])
         return data
         
 
 class OvfEngine(xr.backends.BackendEntrypoint):
-    open_dataset_parameters = ["filename_or_obj", "drop_variables", "dtype", "wavetype", "dirListToConcat", "sweepName", "sweepParam", "removeOvfFiles", "useEachNthOvfFile"]      
+    open_dataset_parameters = ["filename_or_obj", "drop_variables", "dtype", "wavetype", "dirListToConcat", "sweepName", "sweepParam", "removeOvfFiles", "useEachNthOvfFile", "singleLoad", "t"]      
     def open_dataset(
         self,
         filename_or_obj,
@@ -568,36 +740,79 @@ class OvfEngine(xr.backends.BackendEntrypoint):
         sweepName='',
         sweepParam=[],
         removeOvfFiles=False,
-        useEachNthOvfFile=0
+        useEachNthOvfFile=0,
+        singleLoad=False,
+        t=None
     ):
     
+        sc = False
         backend_array = OvfBackendArray(
-            filename_or_obj,
-            dtype,
+            deepcopy(filename_or_obj),
+            deepcopy(dtype),
             dask.utils.SerializableLock(),
-            wavetype,
-            dirListToConcat,
-            sweepName,
-            sweepParam,
-            removeOvfFiles,
-            useEachNthOvfFile
+            deepcopy(wavetype),
+            deepcopy(dirListToConcat),
+            deepcopy(sweepName),
+            deepcopy(sweepParam),
+            deepcopy(removeOvfFiles),
+            deepcopy(useEachNthOvfFile),
+            deepcopy(singleLoad),
+            deepcopy(t),
+            sc
         )
         data = xr.core.indexing.LazilyIndexedArray(backend_array)
 
-        defaultChunks = {}
+        sc = True
+
+        backend_array_sc = OvfBackendArray(
+            deepcopy(filename_or_obj),
+            deepcopy(dtype),
+            dask.utils.SerializableLock(),
+            deepcopy(wavetype),
+            deepcopy(dirListToConcat),
+            deepcopy(sweepName),
+            deepcopy(sweepParam),
+            deepcopy(removeOvfFiles),
+            deepcopy(useEachNthOvfFile),
+            deepcopy(singleLoad),
+            deepcopy(t),
+            sc
+        )
+
+
+        dataSc = xr.core.indexing.LazilyIndexedArray(backend_array_sc)
+
         notOneDims = ['x', 'y', 'z', 'comp']
-        for dim in backend_array.dims:
-            if (dim not in notOneDims):
-                defaultChunks[dim] = 1
-        defaultChunks['z'] = backend_array.coords[-4].size
-        defaultChunks['y'] = backend_array.coords[-3].size
-        defaultChunks['x'] = backend_array.coords[-2].size
-        defaultChunks['comp'] = backend_array.coords[-1].size
+        defaultChunks = {}
+        if (backend_array.shape != ()):
+            for dim in backend_array.dims:
+                if (dim not in notOneDims):
+                    defaultChunks[dim] = 1
+            defaultChunks['z'] = backend_array.coords[-4].size
+            defaultChunks['y'] = backend_array.coords[-3].size
+            defaultChunks['x'] = backend_array.coords[-2].size
+            defaultChunks['comp'] = backend_array.coords[-1].size
 
-        var = xr.Variable(dims=backend_array.dims, data=data)
-        var.encoding["preferred_chunks"] = defaultChunks
-        dataset = xr.Dataset({'raw': var}, coords=dict(zip(backend_array.dims, backend_array.coords)))
-
+        if (backend_array_sc.shape != ()):
+            defaultChunksSc = {}
+            for dim in backend_array_sc.dims:
+                if (dim not in notOneDims):
+                    defaultChunksSc[dim] = 1
+            defaultChunksSc['z'] = backend_array_sc.coords[-3].size
+            defaultChunksSc['y'] = backend_array_sc.coords[-2].size
+            defaultChunksSc['x'] = backend_array_sc.coords[-1].size
+        if (backend_array.shape != ()):
+            var = xr.Variable(dims=backend_array.dims, data=data)
+            var.encoding["preferred_chunks"] = defaultChunks
+        if (backend_array_sc.shape != ()):
+            varSc = xr.Variable(dims=backend_array_sc.dims, data=dataSc)
+            varSc.encoding["preferred_chunks"] = defaultChunksSc
+        if (backend_array_sc.shape != () and backend_array.shape != ()):
+            dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims, backend_array.coords)))
+        elif (backend_array_sc.shape != () and backend_array.shape == ()):
+            dataset = xr.Dataset({'rawSc': varSc}, coords=dict(zip(backend_array_sc.dims, backend_array_sc.coords)))
+        elif (backend_array_sc.shape == () and backend_array.shape != ()):
+            dataset = xr.Dataset({'raw': var}, coords=dict(zip(backend_array.dims, backend_array.coords)))
         dataset.attrs["cellsize"] = backend_array.mesh.cellsize
         dataset.attrs["nodes"] = backend_array.mesh.nodes
         dataset.attrs["min_size"] = backend_array.mesh.world_min
@@ -617,11 +832,25 @@ class OvfEngine(xr.backends.BackendEntrypoint):
             return True
             
 
-def convert_TableFile_to_dataset(tableTxtFilePath):
+def convert_TableFile_to_dataset(tableTxtFilePath, prefix=''):
     tableArrayVec = None
     tableArraySc = None
     with HiddenPrints():
-        numpyData = np.loadtxt(tableTxtFilePath, dtype=np.float32)
+        try:
+            numpyData = np.loadtxt(tableTxtFilePath, dtype=np.float32)
+        except ValueError:
+            numpyData = np.loadtxt(tableTxtFilePath, dtype=str)
+            if prefix == '':
+                prefix = '_'.join(numpyData[0, 0].split('_')[:-1])
+            if Version(str(np.__version__)) <= Version('1.26.1'):
+                negativeIndex = np.flatnonzero(np.core.defchararray.find(numpyData[:,0],prefix)!=-1).astype(int)
+                positiveIndex = np.flatnonzero(np.core.defchararray.find(numpyData[:,0],prefix)==-1).astype(int)
+            else:
+                negativeIndex = np.where(np.char.find(np.char.lower(numpyData[:,0]), prefix) > -1)[0]
+                positiveIndex = np.where(np.char.find(np.char.lower(numpyData[:,0]), prefix) <= -1)[0]
+            numpyDataNeg = np.flip(np.hstack((-np.expand_dims(np.char.replace(numpyData[negativeIndex,0], prefix + '_', '').astype(np.float32), axis=-1), numpyData[negativeIndex,1:].astype(np.float32))), axis=0)
+            numpyDataPos = np.hstack((np.expand_dims(numpyData[positiveIndex,0].astype(np.float32), axis=-1), numpyData[positiveIndex,1:].astype(np.float32)))
+            numpyData = np.vstack((numpyDataNeg, numpyDataPos))
         with open(tableTxtFilePath, "r") as tableFile:
             titleLine = tableFile.readline()
     numpyData = numpyData[np.unique(numpyData[:,0], return_index=True)[1]]
