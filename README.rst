@@ -36,5 +36,6 @@ For ND concatenation pass a list of names to sweepNames and a list of tuples to 
 
 If you want the ovf-files to be deleted after reading, set removeOvfFiles=True. This only works, if the ovf-files don't have to be accessed multiple times.
 If you want to use ovf-files periodically, set useEachNthOvfFile=N. N has to be larger than one. Otherwise it is ignored. Using this flag, only each nth ovf file is used for the dataset.
+The singleLoad option allows you to not load all of the ovf-files but only one specific one.
 
 Of course the wavetype option and the mumax directory concatenation can be used simultaneously.
