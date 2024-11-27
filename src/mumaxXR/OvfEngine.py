@@ -559,6 +559,9 @@ class OvfBackendArray(xr.backends.BackendArray):
             ynodes = int(footer_dict[b"ynodes"])
             znodes = int(footer_dict[b"znodes"])
 
+            if self.dtype == np.complex64:
+                xnodes = int((xnodes / 2 + 1))
+
 
             nodes = np.array([xnodes, ynodes, znodes])
             xmin = float(footer_dict[b"xmin"])
@@ -582,6 +585,7 @@ class OvfBackendArray(xr.backends.BackendArray):
                 n_comp = int(footer_dict[b'valuedim'])
             else:
                 n_comp = 1
+            
         return MumaxMesh(filename, nodes, world_min, world_max, tmax, n_comp, footer_dict)
     
     def get_corresponding_files(self, filename, returnTData=False, type='', returnMeshData=True) -> Union[Tuple[list, np.ndarray], list, np.ndarray]:
@@ -702,8 +706,10 @@ class OvfBackendArray(xr.backends.BackendArray):
     def read_data_from_ovf(self, filename) -> np.ndarray:
         filename = Path(filename)
         with self.lock, open(filename, "rb") as file:
-            if not _binary == 4:
-                raise ValueError('Error: Unknown binary type assigned for reading in .ovf2 data')
+            if self.dtype == np.complex64:
+                _binary = 8
+            else:
+                _binary = 4
 
             data_start_pos = 0
 
@@ -711,19 +717,32 @@ class OvfBackendArray(xr.backends.BackendArray):
                 line = file.readline()
                 if b'# Begin: Data' in line:
                     # the first binary number is a control number specified in the ovf format
-                    file.read(_binary)
+                    file.read(4)
                     data_start_pos = file.tell()
                     break
                 if (i == 45):
                     raise ValueError("Error: %s has no well formatted data segment." % filename)
 
             file.seek(data_start_pos, 0)
-            size = int(self.mesh.n_comp * self.mesh.number_of_cells * _binary / 4)
-            data = np.fromfile(file, dtype=self.dtype, count=size)
-            if (self.sc == False):
-                data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp)
+            if _binary == 8:
+                size = int(self.mesh.n_comp * self.mesh.number_of_cells * 2)
+                data = np.fromfile(file, dtype=np.float32, count=size)
             else:
-                data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0])
+                size = int(self.mesh.n_comp * self.mesh.number_of_cells)
+                data = np.fromfile(file, dtype=self.dtype, count=size)
+
+            if _binary == 8:
+                if (self.sc == False):
+                    data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], int(self.mesh.nodes[0]), self.mesh.n_comp, 2)
+                else:
+                    data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], int(self.mesh.nodes[0]), 2)
+                data = data[...,0] + 1j*data[...,1]
+            else:
+                if (self.sc == False):
+                    data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp)
+                else:
+                    data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0])
+
         return data
         
 
@@ -782,37 +801,79 @@ class OvfEngine(xr.backends.BackendEntrypoint):
 
         dataSc = xr.core.indexing.LazilyIndexedArray(backend_array_sc)
 
-        notOneDims = ['x', 'y', 'z', 'comp']
-        defaultChunks = {}
-        if (backend_array.shape != ()):
-            for dim in backend_array.dims:
-                if (dim not in notOneDims):
-                    defaultChunks[dim] = 1
-            defaultChunks['z'] = backend_array.coords[-4].size
-            defaultChunks['y'] = backend_array.coords[-3].size
-            defaultChunks['x'] = backend_array.coords[-2].size
-            defaultChunks['comp'] = backend_array.coords[-1].size
+        if dtype == np.complex64:
+            notOneDims = ['k_x', 'k_y', 'k_z', 'comp']
+            defaultChunks = {}
+            if (backend_array.shape != ()):
+                for dim in backend_array.dims:
+                    if (dim not in notOneDims):
+                        defaultChunks[dim] = 1
+                defaultChunks['k_z'] = backend_array.coords[-4].size
+                defaultChunks['k_y'] = backend_array.coords[-3].size
+                defaultChunks['k_x'] = backend_array.coords[-2].size
+                defaultChunks['comp'] = backend_array.coords[-1].size
 
-        if (backend_array_sc.shape != ()):
-            defaultChunksSc = {}
-            for dim in backend_array_sc.dims:
-                if (dim not in notOneDims):
-                    defaultChunksSc[dim] = 1
-            defaultChunksSc['z'] = backend_array_sc.coords[-3].size
-            defaultChunksSc['y'] = backend_array_sc.coords[-2].size
-            defaultChunksSc['x'] = backend_array_sc.coords[-1].size
-        if (backend_array.shape != ()):
-            var = xr.Variable(dims=backend_array.dims, data=data)
-            var.encoding["preferred_chunks"] = defaultChunks
-        if (backend_array_sc.shape != ()):
-            varSc = xr.Variable(dims=backend_array_sc.dims, data=dataSc)
-            varSc.encoding["preferred_chunks"] = defaultChunksSc
-        if (backend_array_sc.shape != () and backend_array.shape != ()):
-            dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims + ['wavetypeSc'], backend_array.coords + [backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])))
-        elif (backend_array_sc.shape != () and backend_array.shape == ()):
-            dataset = xr.Dataset({'rawSc': varSc}, coords=dict(zip(backend_array_sc.dims, backend_array_sc.coords)))
-        elif (backend_array_sc.shape == () and backend_array.shape != ()):
-            dataset = xr.Dataset({'raw': var}, coords=dict(zip(backend_array.dims, backend_array.coords)))
+            if (backend_array_sc.shape != ()):
+                defaultChunksSc = {}
+                for dim in backend_array_sc.dims:
+                    if (dim not in notOneDims):
+                        defaultChunksSc[dim] = 1
+                defaultChunksSc['k_z'] = backend_array_sc.coords[-3].size
+                defaultChunksSc['k_y'] = backend_array_sc.coords[-2].size
+                defaultChunksSc['k_x'] = backend_array_sc.coords[-1].size
+            replaceDims = ['x', 'y', 'z']
+            if (backend_array.shape != ()):
+                for i in range(len(backend_array.dims)):
+                    if backend_array.dims[i] in replaceDims:
+                        backend_array.dims[i] = 'k_' + backend_array.dims[i]
+                var = xr.Variable(dims=backend_array.dims, data=data)
+                var.encoding["preferred_chunks"] = defaultChunks
+            if (backend_array_sc.shape != ()):
+                for i in range(len(backend_array_sc.dims)):
+                    if backend_array_sc.dims[i] in replaceDims:
+                        backend_array_sc.dims[i] = 'k_' + backend_array_sc.dims[i]
+                varSc = xr.Variable(dims=backend_array_sc.dims, data=dataSc)
+                varSc.encoding["preferred_chunks"] = defaultChunksSc
+            if (backend_array_sc.shape != () and backend_array.shape != ()):
+                print([backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])
+                dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims + ['wavetypeSc'], backend_array.coords + [backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])))
+            elif (backend_array_sc.shape != () and backend_array.shape == ()):
+                dataset = xr.Dataset({'rawSc': varSc}, coords=dict(zip(backend_array_sc.dims, backend_array_sc.coords)))
+            elif (backend_array_sc.shape == () and backend_array.shape != ()):
+                dataset = xr.Dataset({'raw': var}, coords=dict(zip(backend_array.dims, backend_array.coords)))
+        else:
+            notOneDims = ['x', 'y', 'z', 'comp']
+            defaultChunks = {}
+            if (backend_array.shape != ()):
+                for dim in backend_array.dims:
+                    if (dim not in notOneDims):
+                        defaultChunks[dim] = 1
+                defaultChunks['z'] = backend_array.coords[-4].size
+                defaultChunks['y'] = backend_array.coords[-3].size
+                defaultChunks['x'] = backend_array.coords[-2].size
+                defaultChunks['comp'] = backend_array.coords[-1].size
+
+            if (backend_array_sc.shape != ()):
+                defaultChunksSc = {}
+                for dim in backend_array_sc.dims:
+                    if (dim not in notOneDims):
+                        defaultChunksSc[dim] = 1
+                defaultChunksSc['z'] = backend_array_sc.coords[-3].size
+                defaultChunksSc['y'] = backend_array_sc.coords[-2].size
+                defaultChunksSc['x'] = backend_array_sc.coords[-1].size
+            if (backend_array.shape != ()):
+                var = xr.Variable(dims=backend_array.dims, data=data)
+                var.encoding["preferred_chunks"] = defaultChunks
+            if (backend_array_sc.shape != ()):
+                varSc = xr.Variable(dims=backend_array_sc.dims, data=dataSc)
+                varSc.encoding["preferred_chunks"] = defaultChunksSc
+            if (backend_array_sc.shape != () and backend_array.shape != ()):
+                print([backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])
+                dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims + ['wavetypeSc'], backend_array.coords + [backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])))
+            elif (backend_array_sc.shape != () and backend_array.shape == ()):
+                dataset = xr.Dataset({'rawSc': varSc}, coords=dict(zip(backend_array_sc.dims, backend_array_sc.coords)))
+            elif (backend_array_sc.shape == () and backend_array.shape != ()):
+                dataset = xr.Dataset({'raw': var}, coords=dict(zip(backend_array.dims, backend_array.coords)))
         dataset.attrs["cellsize"] = backend_array.mesh.cellsize
         dataset.attrs["nodes"] = backend_array.mesh.nodes
         dataset.attrs["min_size"] = backend_array.mesh.world_min
