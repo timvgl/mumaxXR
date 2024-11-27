@@ -808,7 +808,7 @@ class OvfEngine(xr.backends.BackendEntrypoint):
             varSc = xr.Variable(dims=backend_array_sc.dims, data=dataSc)
             varSc.encoding["preferred_chunks"] = defaultChunksSc
         if (backend_array_sc.shape != () and backend_array.shape != ()):
-            dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims, backend_array.coords)))
+            dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims + ['wavetypeSc'], backend_array.coords + [backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])))
         elif (backend_array_sc.shape != () and backend_array.shape == ()):
             dataset = xr.Dataset({'rawSc': varSc}, coords=dict(zip(backend_array_sc.dims, backend_array_sc.coords)))
         elif (backend_array_sc.shape == () and backend_array.shape != ()):
