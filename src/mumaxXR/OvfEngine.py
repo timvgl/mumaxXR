@@ -101,7 +101,7 @@ class HiddenPrints:
 
 _binary = 4
 class MumaxMesh:
-    def __init__(self, filename, nodes, world_min, world_max, tmax, n_comp, footer_dict, step_times=None):
+    def __init__(self, filename, nodes, world_min, world_max, tmax, n_comp, footer_dict, step_times=None, dtype=np.float32):
         self.filename = filename
         self.nodes = nodes
         self.world_min = world_min
@@ -113,9 +113,10 @@ class MumaxMesh:
         self.n_comp = n_comp
         self.step_times = step_times
         self.cellsize = [self.get_cellsize(i) for i in range(3)]
+        self.dtype = dtype
 
     def get_axis(self, i):
-        return np.linspace(self.world_min[i], self.world_max[i], self.nodes[i])
+            return np.linspace(self.world_min[i], self.world_max[i], self.nodes[i])
 
     def get_cellsize(self, i):
         return (self.world_max[i] - self.world_min[i]) / self.nodes[i]
@@ -559,20 +560,20 @@ class OvfBackendArray(xr.backends.BackendArray):
             ynodes = int(footer_dict[b"ynodes"])
             znodes = int(footer_dict[b"znodes"])
 
-            if self.dtype == np.complex64:
-                xnodes = int((xnodes / 2 + 1))
-
-
             nodes = np.array([xnodes, ynodes, znodes])
-            xmin = float(footer_dict[b"xmin"])
-            ymin = float(footer_dict[b"ymin"])
-            zmin = float(footer_dict[b"zmin"])
+            xmin = float(footer_dict[b"xmin"] if b"xmin" in footer_dict else footer_dict[b"k_xmin"])
+            ymin = float(footer_dict[b"ymin"] if b"ymin" in footer_dict else footer_dict[b"k_ymin"])
+            zmin = float(footer_dict[b"zmin"] if b"zmin" in footer_dict else footer_dict[b"k_zmin"])
+
+
 
             world_min = np.array([xmin, ymin, zmin])
 
-            xmax = float(footer_dict[b"xmax"])
-            ymax = float(footer_dict[b"ymax"])
-            zmax = float(footer_dict[b"zmax"])
+            xmax = float(footer_dict[b"xmax"] if b"xmax" in footer_dict else footer_dict[b"k_xmax"])
+            ymax = float(footer_dict[b"ymax"] if b"ymax" in footer_dict else footer_dict[b"k_ymax"])
+            zmax = float(footer_dict[b"zmax"] if b"zmax" in footer_dict else footer_dict[b"k_zmax"])
+
+
 
             world_max = np.array([xmax, ymax, zmax])
             if b' s' in footer_dict[b"tmax"]:
@@ -586,7 +587,13 @@ class OvfBackendArray(xr.backends.BackendArray):
             else:
                 n_comp = 1
             
-        return MumaxMesh(filename, nodes, world_min, world_max, tmax, n_comp, footer_dict)
+            
+            if footer_dict[b"Begin"] == b"Data Binary 4+4":
+                self.dtype = np.complex64
+            else:
+                self.dtype = np.float32
+            
+        return MumaxMesh(filename, nodes, world_min, world_max, tmax, n_comp, footer_dict, dtype=self.dtype)
     
     def get_corresponding_files(self, filename, returnTData=False, type='', returnMeshData=True) -> Union[Tuple[list, np.ndarray], list, np.ndarray]:
         def get_line_index_t_from_ovf(filename, lock) -> int:
@@ -730,12 +737,11 @@ class OvfBackendArray(xr.backends.BackendArray):
             else:
                 size = int(self.mesh.n_comp * self.mesh.number_of_cells)
                 data = np.fromfile(file, dtype=self.dtype, count=size)
-
             if _binary == 8:
                 if (self.sc == False):
-                    data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], int(self.mesh.nodes[0]), self.mesh.n_comp, 2)
+                    data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp, 2)
                 else:
-                    data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], int(self.mesh.nodes[0]), 2)
+                    data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], 2)
                 data = data[...,0] + 1j*data[...,1]
             else:
                 if (self.sc == False):
@@ -801,7 +807,7 @@ class OvfEngine(xr.backends.BackendEntrypoint):
 
         dataSc = xr.core.indexing.LazilyIndexedArray(backend_array_sc)
 
-        if dtype == np.complex64:
+        if backend_array.dtype == np.complex64:
             notOneDims = ['k_x', 'k_y', 'k_z', 'comp']
             defaultChunks = {}
             if (backend_array.shape != ()):
