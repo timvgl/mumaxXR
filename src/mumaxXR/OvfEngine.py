@@ -206,7 +206,7 @@ class OvfBackendArray(xr.backends.BackendArray):
                 elif ('u000000.ovf' in ovfFilesList):
                     startingFileName = 'u000000.ovf'
                 else:
-                    startingFileName = ovfFilesList[0].name
+                    startingFileName = ovfFilesList[0]
             else:
                 startingFileName = self.dirListToConcat[0].name
             if (self.filename_or_obj.suffix != '.ovf'):
@@ -276,7 +276,7 @@ class OvfBackendArray(xr.backends.BackendArray):
                 elif ('u000000.ovf' in ovfFilesList):
                     startingFileName = 'u000000.ovf'
                 else:
-                    startingFileName = ovfFilesList[0].name
+                    startingFileName = ovfFilesList[0]
             else:
                 startingFileName = self.dirListToConcat[0].name
             if (self.filename_or_obj.suffix != '.ovf'):
@@ -636,7 +636,7 @@ class OvfBackendArray(xr.backends.BackendArray):
                 pass
         try:
             if (self.singleLoad == False):
-                fileList = sorted(list(Path(filename).parent.glob('**/' + Path(filename).stem[:Path(filename).stem.return_index_before_int()+1] + '*.ovf')))
+                fileList = sorted(list(Path(filename).parent.glob('**/' + Path(filename).stem[:Path(filename).stem.return_index_before_int()+1] + '[0-9][0-9][0-9][0-9][0-9][0-9].ovf')))
             else:
                 raise TypeError
         except TypeError:
@@ -841,7 +841,6 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                 varSc = xr.Variable(dims=backend_array_sc.dims, data=dataSc)
                 varSc.encoding["preferred_chunks"] = defaultChunksSc
             if (backend_array_sc.shape != () and backend_array.shape != ()):
-                print([backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])
                 dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims + ['wavetypeSc'], backend_array.coords + [backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])))
             elif (backend_array_sc.shape != () and backend_array.shape == ()):
                 dataset = xr.Dataset({'rawSc': varSc}, coords=dict(zip(backend_array_sc.dims, backend_array_sc.coords)))
@@ -874,7 +873,6 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                 varSc = xr.Variable(dims=backend_array_sc.dims, data=dataSc)
                 varSc.encoding["preferred_chunks"] = defaultChunksSc
             if (backend_array_sc.shape != () and backend_array.shape != ()):
-                print([backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])
                 dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims + ['wavetypeSc'], backend_array.coords + [backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])))
             elif (backend_array_sc.shape != () and backend_array.shape == ()):
                 dataset = xr.Dataset({'rawSc': varSc}, coords=dict(zip(backend_array_sc.dims, backend_array_sc.coords)))
