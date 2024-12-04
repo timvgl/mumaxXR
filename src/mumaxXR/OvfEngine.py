@@ -742,7 +742,14 @@ class OvfBackendArray(xr.backends.BackendArray):
                     data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp, 2)
                 else:
                     data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], 2)
+                
                 data = data[...,0] + 1j*data[...,1]
+                if data.shape[0] > 1:
+                    data = np.concatenate((np.flip(data[int(data.shape[0] / 2):], axis=0), data[:int(data.shape[0] / 2)]), axis=0)
+                if data.shape[1] > 1:
+                    data = np.concatenate((np.flip(data[:,int(data.shape[1] / 2):], axis=1), data[:,:int(data.shape[1] / 2)]), axis=1)
+                #if data.shape[2] > 1:
+                #    data = np.concatenate((np.flip(data[:,:,int(data.shape[2] / 2):], axis=2), data[:,:,:int(data.shape[2] / 2)]), axis=2)
             else:
                 if (self.sc == False):
                     data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp)
