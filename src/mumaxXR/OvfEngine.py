@@ -101,7 +101,7 @@ class HiddenPrints:
 
 _binary = 4
 class MumaxMesh:
-    def __init__(self, filename, nodes, world_min, world_max, tmax, n_comp, footer_dict, step_times=None, dtype=np.float32):
+    def __init__(self, filename, nodes, world_min, world_max, tmax, n_comp, footer_dict, step_times=None, dtype=np.float32, isFFT=False):
         self.filename = filename
         self.nodes = nodes
         self.world_min = world_min
@@ -114,7 +114,7 @@ class MumaxMesh:
         self.step_times = step_times
         self.cellsize = [self.get_cellsize(i) for i in range(3)]
         self.dtype = dtype
-
+        self.isFFT = isFFT
     def get_axis(self, i):
             return np.linspace(self.world_min[i], self.world_max[i], self.nodes[i])
 
@@ -592,8 +592,10 @@ class OvfBackendArray(xr.backends.BackendArray):
                 self.dtype = np.complex64
             else:
                 self.dtype = np.float32
+
+            isFFT = b"k_xmin" in footer_dict and b"k_xmax" in footer_dict or b"k_ymin" in footer_dict and b"k_ymax" in footer_dict or b"k_zmin" in footer_dict and b"k_zmax" in footer_dict
             
-        return MumaxMesh(filename, nodes, world_min, world_max, tmax, n_comp, footer_dict, dtype=self.dtype)
+        return MumaxMesh(filename, nodes, world_min, world_max, tmax, n_comp, footer_dict, dtype=self.dtype, isFFT=isFFT)
     
     def get_corresponding_files(self, filename, returnTData=False, type='', returnMeshData=True) -> Union[Tuple[list, np.ndarray], list, np.ndarray]:
         def get_line_index_t_from_ovf(filename, lock) -> int:
@@ -737,7 +739,7 @@ class OvfBackendArray(xr.backends.BackendArray):
             else:
                 size = int(self.mesh.n_comp * self.mesh.number_of_cells)
                 data = np.fromfile(file, dtype=self.dtype, count=size)
-            if _binary == 8:
+            if _binary == 8 and self.mesh.isFFT == True:
                 if (self.sc == False):
                     data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp, 2)
                 else:
@@ -746,19 +748,17 @@ class OvfBackendArray(xr.backends.BackendArray):
                 data = data[...,0] + 1j*data[...,1]
                 if data.shape[0] > 1:
                     if  data.shape[0] % 2 == 0:
-                        data[int(data.shape[0] / 2)] += data[0]
-                    data = np.concatenate((np.flip(data[int(data.shape[0] / 2):], axis=0), data[:int(data.shape[0] / 2)]), axis=0)
+                        data[int(data.shape[0] / 2) -1] = data[int(data.shape[0] / 2)]
                 if data.shape[1] > 1:
                     if  data.shape[1] % 2 == 0:
-                        data[:,int(data.shape[1] / 2)] += data[:,0]
-                    data = np.concatenate((np.flip(data[:,int(data.shape[1] / 2):], axis=1), data[:,:int(data.shape[1] / 2)]), axis=1)
-                #if data.shape[2] > 1:
-                #    data = np.concatenate((np.flip(data[:,:,int(data.shape[2] / 2):], axis=2), data[:,:,:int(data.shape[2] / 2)]), axis=2)
-            else:
+                        data[:,int(data.shape[1] / 2) -1] = data[:,int(data.shape[1] / 2)]
+            elif _binary == 4 and self.mesh.isFFT == True or _binary == 4 and self.mesh.isFFT == False:
                 if (self.sc == False):
                     data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp)
                 else:
                     data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0])
+            else:
+                raise ValueError("Non FFT complex data supported.")
 
         return data
         
@@ -818,7 +818,7 @@ class OvfEngine(xr.backends.BackendEntrypoint):
 
         dataSc = xr.core.indexing.LazilyIndexedArray(backend_array_sc)
 
-        if backend_array.dtype == np.complex64:
+        if backend_array.mesh.isFFT == True:
             notOneDims = ['k_x', 'k_y', 'k_z', 'comp']
             defaultChunks = {}
             if (backend_array.shape != ()):
