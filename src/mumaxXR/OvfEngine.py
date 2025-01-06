@@ -44,10 +44,15 @@ class custom_string():
         except ValueError:
             return False
         
-    def return_index_before_int(self):
-        for char in list(self):
-            if (custom_string.castable_int(char) == True):
-                return list(self).index(char) -1
+    def check_last_six_chars(self):
+        lastSixCharsInts = True
+        selfRev = list(reversed(list(self)))
+        for i in range(6):
+            if (custom_string.castable_int(selfRev[i]) == False):
+                lastSixCharsInts = False
+        if lastSixCharsInts == False:
+            raise ValueError("Last chars are not ints.")
+        return len(list(self)) -7
 
 def castableList(inputList):
     try:
@@ -84,7 +89,7 @@ curse(str, "check_upper_available", custom_string.check_upper_available)
 curse(str, "check_lower_available", custom_string.check_lower_available)
 curse(str, "replace_substring_at_nth", custom_string.replace_substring_at_nth)
 curse(str, "cast_toFloatExceptString", custom_string.cast_toFloatExceptString)
-curse(str, "return_index_before_int", custom_string.return_index_before_int)
+curse(str, "check_last_six_chars", custom_string.check_last_six_chars)
 
 
 curse(list, "isinstance_recursive", custom_list.isinstance_recursive)
@@ -101,7 +106,7 @@ class HiddenPrints:
 
 _binary = 4
 class MumaxMesh:
-    def __init__(self, filename, nodes, world_min, world_max, tmax, n_comp, footer_dict, step_times=None, dtype=np.float32, isFFT=False):
+    def __init__(self, filename, nodes, world_min, world_max, tmax, freq, n_comp, footer_dict, step_times=None, dtype=np.float32, isFFT=False):
         self.filename = filename
         self.nodes = nodes
         self.world_min = world_min
@@ -115,6 +120,7 @@ class MumaxMesh:
         self.cellsize = [self.get_cellsize(i) for i in range(3)]
         self.dtype = dtype
         self.isFFT = isFFT
+        self.freq = freq
     def get_axis(self, i):
             return np.linspace(self.world_min[i], self.world_max[i], self.nodes[i])
 
@@ -552,6 +558,7 @@ class OvfBackendArray(xr.backends.BackendArray):
                 line = line.replace(b'# ', b'')
                 line = line.replace(b'Desc: Total simulation time: ', b'tmax: ')
                 line = line.replace(b'Desc: Time (s) : ', b'tmax: ')
+                line = line.replace(b'Desc: Frequency:', b'freq: ')
                 footer.append(line)
                 attr, val = line.split(b': ')
                 footer_dict[attr] = val.replace(b"\n", b"")
@@ -576,11 +583,19 @@ class OvfBackendArray(xr.backends.BackendArray):
 
 
             world_max = np.array([xmax, ymax, zmax])
-            if b' s' in footer_dict[b"tmax"]:
-                tmax_string, _ = footer_dict[b"tmax"].split(b' s')
-            else:
-                tmax_string = footer_dict[b"tmax"]
-            tmax = float(tmax_string)
+            tmax, freq = None, None
+            if b"tmax" in footer_dict:
+                if b' s' in footer_dict[b"tmax"]:
+                    tmax_string, _ = footer_dict[b"tmax"].split(b' s')
+                else:
+                    tmax_string = footer_dict[b"tmax"]
+                tmax = float(tmax_string)
+            elif b"freq" in footer_dict:
+                if b' Hz' in footer_dict[b"freq"]:
+                    freq_string, _ = footer_dict[b"freq"].split(b' Hz')
+                else:
+                    freq_string = footer_dict[b"freq"]
+                freq = float(freq_string)
 
             if b'valuedim' in footer_dict:
                 n_comp = int(footer_dict[b'valuedim'])
@@ -595,7 +610,7 @@ class OvfBackendArray(xr.backends.BackendArray):
 
             isFFT = b"k_xmin" in footer_dict and b"k_xmax" in footer_dict or b"k_ymin" in footer_dict and b"k_ymax" in footer_dict or b"k_zmin" in footer_dict and b"k_zmax" in footer_dict
             
-        return MumaxMesh(filename, nodes, world_min, world_max, tmax, n_comp, footer_dict, dtype=self.dtype, isFFT=isFFT)
+        return MumaxMesh(filename, nodes, world_min, world_max, tmax, freq, n_comp, footer_dict, dtype=self.dtype, isFFT=isFFT)
     
     def get_corresponding_files(self, filename, returnTData=False, type='', returnMeshData=True) -> Union[Tuple[list, np.ndarray], list, np.ndarray]:
         def get_line_index_t_from_ovf(filename, lock) -> int:
@@ -606,7 +621,8 @@ class OvfBackendArray(xr.backends.BackendArray):
                     line = line.replace(b'# ', b'')
                     line = line.replace(b'Desc: Total simulation time: ', b'tmax: ')
                     line = line.replace(b'Desc: Time (s) : ', b'tmax: ')
-                    if ('tmax' in line.decode()):
+                    line = line.replace(b'Desc: Frequency:', b'freq: ')
+                    if ('tmax' in line.decode() or 'freq' in line.decode()):
                         return i
             return -1
         
@@ -619,13 +635,23 @@ class OvfBackendArray(xr.backends.BackendArray):
                     line = line.replace(b'# ', b'')
                     line = line.replace(b'Desc: Total simulation time: ', b'tmax: ')
                     line = line.replace(b'Desc: Time (s) : ', b'tmax: ')
+                    line = line.replace(b'Desc: Frequency:', b'freq: ')
                     attr, val = line.split(b': ')
                     footer_dict[attr] = val.replace(b"\n", b"")
-                    if b' s' in footer_dict[b"tmax"]:
-                        tmax_string, _ = footer_dict[b"tmax"].split(b' s')
+                    if b'tmax' in footer_dict:
+                        if b' s' in footer_dict[b"tmax"]:
+                            tmax_string, _ = footer_dict[b"tmax"].split(b' s')
+                        else:
+                            tmax_string = footer_dict[b"tmax"]
+                        return float(tmax_string)
+                    elif b'freq' in footer_dict:
+                        if b' Hz' in footer_dict[b"freq"]:
+                            freq_string, _ = footer_dict[b"freq"].split(b' Hz')
+                        else:
+                            freq_string = footer_dict[b"freq"]
+                        return float(freq_string)
                     else:
-                        tmax_string = footer_dict[b"tmax"]
-                    return float(tmax_string)
+                        raise ValueError("Could neither find time nor frequency in ovf file: " + file.name)
                 except IndexError:
                     print('Found ovf file of not finished sim. Stopping from: ' + filename.name)
                     return None
@@ -638,7 +664,7 @@ class OvfBackendArray(xr.backends.BackendArray):
                 pass
         try:
             if (self.singleLoad == False):
-                fileList = sorted(list(Path(filename).parent.glob('**/' + Path(filename).stem[:Path(filename).stem.return_index_before_int()+1] + '[0-9][0-9][0-9][0-9][0-9][0-9].ovf')))
+                fileList = sorted(list(Path(filename).parent.glob('**/' + Path(filename).stem[:Path(filename).stem.check_last_six_chars()+1] + '[0-9][0-9][0-9][0-9][0-9][0-9].ovf')))
             else:
                 raise TypeError
         except TypeError:
@@ -653,8 +679,8 @@ class OvfBackendArray(xr.backends.BackendArray):
                 array = np.asarray(timeList)
                 idx = (np.abs(timeList - value)).argmin()
                 smallestDiffValue = timeList[idx]
-                if (smallestDiffValue < value and idx < timeList.size+1):
-                    return (idx, smallestDiffValue, timeList[idx+1], 'lower')
+                if (smallestDiffValue < value and idx < np.array(timeList).size):
+                    return (idx, smallestDiffValue, timeList[idx], 'lower')
                 elif (smallestDiffValue > value and idx > 0):
                     return (idx, timeList[idx-1], smallestDiffValue, 'higher')
                 else:
@@ -671,8 +697,8 @@ class OvfBackendArray(xr.backends.BackendArray):
                 else:
                     break
 
-            if (self.tmaxArray.size < len(fileList)):
-                print(filename.parents[0].__str__().replace(filename.parents[1].__str__(), '') + ' contains more ovf-files than expected. Interpolating to ' + str(self.tmaxArray.size) + ' timesteps ...')
+            if (self.tmaxArray.size < len(fileList)):#.replace(filename.parents[1].__str__(), '')
+                print(filename.parents[0].__str__() + ' contains more ovf-files than expected. Interpolating to ' + str(self.tmaxArray.size) + ' timesteps ...')
                 interpolatedfileList = []
                 for i in range(self.tmaxArray.size):
                     nearest = list(find_nearest(tData, self.tmaxArray[i]))
@@ -683,8 +709,9 @@ class OvfBackendArray(xr.backends.BackendArray):
                             interpolatedfileList.append({(self.tmaxArray[i]): (nearest[1], fileList[nearest[0]], nearest[2], fileList[nearest[0]+1])})
                         elif (nearest[3] == 'higher'):
                             interpolatedfileList.append({(self.tmaxArray[i]): (nearest[1], fileList[nearest[0]-1], nearest[2], fileList[nearest[0]])})
-            elif (self.tmaxArray.size > len(fileList)):
-                print(filename.parents[0].__str__().replace(filename.parents[1].__str__(), '') + ' contains less ovf-files than expected. Interpolating to ' + str(self.tmaxArray.size) + ' timesteps ...')
+            elif (self.tmaxArray.size > len(fileList)):#.replace(filename.parents[1].__str__(), '')
+                print(filename.parents[0].__str__() + ' contains less ovf-files than expected. Interpolating to ' + str(self.tmaxArray.size) + ' timesteps ...')
+                interpolatedfileList = []
                 for i in range(self.tmaxArray.size):
                     nearest = list(find_nearest(tData, self.tmaxArray[i]))
                     if (len(nearest) == 2):
@@ -740,10 +767,15 @@ class OvfBackendArray(xr.backends.BackendArray):
                 size = int(self.mesh.n_comp * self.mesh.number_of_cells)
                 data = np.fromfile(file, dtype=self.dtype, count=size)
             if _binary == 8 and self.mesh.isFFT == True:
-                if (self.sc == False):
-                    data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp, 2)
-                else:
-                    data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], 2)
+                try:
+                    if (self.sc == False):
+                        data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp, 2)
+                    else:
+                        data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], 2)
+                except ValueError:
+                    print("Couldnot reshape data from file " + Path(filename).name)
+                    print(str(data.shape) + ' vs ' + str((self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp, 2)) + ' or ' + str((self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], 2)))
+                    exit()
                 
                 data = data[...,0] + 1j*data[...,1]
                 if data.shape[0] > 1:
@@ -822,6 +854,9 @@ class OvfEngine(xr.backends.BackendEntrypoint):
             notOneDims = ['k_x', 'k_y', 'k_z', 'comp']
             defaultChunks = {}
             if (backend_array.shape != ()):
+                if backend_array.mesh.tmax is None and backend_array.mesh.freq is not None:
+                    defaultChunks['f'] = 1
+                    notOneDims.append('f')
                 for dim in backend_array.dims:
                     if (dim not in notOneDims):
                         defaultChunks[dim] = 1
@@ -829,9 +864,13 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                 defaultChunks['k_y'] = backend_array.coords[-3].size
                 defaultChunks['k_x'] = backend_array.coords[-2].size
                 defaultChunks['comp'] = backend_array.coords[-1].size
+                
 
             if (backend_array_sc.shape != ()):
                 defaultChunksSc = {}
+                if backend_array_sc.mesh.tmax is None and backend_array_sc.mesh.freq is not None:
+                    defaultChunks['f'] = 1
+                    notOneDims.append('f')
                 for dim in backend_array_sc.dims:
                     if (dim not in notOneDims):
                         defaultChunksSc[dim] = 1
@@ -843,12 +882,16 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                 for i in range(len(backend_array.dims)):
                     if backend_array.dims[i] in replaceDims:
                         backend_array.dims[i] = 'k_' + backend_array.dims[i]
+                    elif backend_array.mesh.freq is not None and backend_array.mesh.tmax is None and backend_array.dims[i] == 't':
+                        backend_array.dims[i] = 'f'
                 var = xr.Variable(dims=backend_array.dims, data=data)
                 var.encoding["preferred_chunks"] = defaultChunks
             if (backend_array_sc.shape != ()):
                 for i in range(len(backend_array_sc.dims)):
                     if backend_array_sc.dims[i] in replaceDims:
                         backend_array_sc.dims[i] = 'k_' + backend_array_sc.dims[i]
+                    elif backend_array_sc.mesh.freq is not None and backend_array_sc.mesh.tmax is None and backend_array_sc.dims[i] == 't':
+                        backend_array_sc.dims[i] = 'f'
                 varSc = xr.Variable(dims=backend_array_sc.dims, data=dataSc)
                 varSc.encoding["preferred_chunks"] = defaultChunksSc
             if (backend_array_sc.shape != () and backend_array.shape != ()):
