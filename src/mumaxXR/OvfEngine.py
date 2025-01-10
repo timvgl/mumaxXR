@@ -769,15 +769,16 @@ class OvfBackendArray(xr.backends.BackendArray):
             if _binary == 8 and self.mesh.isFFT == True:
                 try:
                     if (self.sc == False):
-                        data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp, 2)
+                        data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], 2, self.mesh.n_comp)
+                        data = data[...,0,:] + 1j*data[...,1,:]
                     else:
                         data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], 2)
+                        data = data[...,0] + 1j*data[...,1]
                 except ValueError:
                     print("Couldnot reshape data from file " + Path(filename).name)
                     print(str(data.shape) + ' vs ' + str((self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], self.mesh.n_comp, 2)) + ' or ' + str((self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], 2)))
                     exit()
                 
-                data = data[...,0] + 1j*data[...,1]
                 if data.shape[0] > 1:
                     if  data.shape[0] % 2 == 0:
                         data[int(data.shape[0] / 2) -1] = data[int(data.shape[0] / 2)]
