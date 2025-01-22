@@ -608,7 +608,7 @@ class OvfBackendArray(xr.backends.BackendArray):
             else:
                 self.dtype = np.float32
 
-            isFFT = b"k_xmin" in footer_dict and b"k_xmax" in footer_dict or b"k_ymin" in footer_dict and b"k_ymax" in footer_dict or b"k_zmin" in footer_dict and b"k_zmax" in footer_dict
+            isFFT = (b"k_xmin" in footer_dict and b"k_xmax" in footer_dict or b"k_ymin" in footer_dict and b"k_ymax" in footer_dict or b"k_zmin" in footer_dict and b"k_zmax" in footer_dict)
             
         return MumaxMesh(filename, nodes, world_min, world_max, tmax, freq, n_comp, footer_dict, dtype=self.dtype, isFFT=isFFT)
     
@@ -766,7 +766,7 @@ class OvfBackendArray(xr.backends.BackendArray):
             else:
                 size = int(self.mesh.n_comp * self.mesh.number_of_cells)
                 data = np.fromfile(file, dtype=self.dtype, count=size)
-            if _binary == 8 and self.mesh.isFFT == True:
+            if _binary == 8:
                 try:
                     if (self.sc == False):
                         data = data.reshape(self.mesh.nodes[2], self.mesh.nodes[1], self.mesh.nodes[0], 2, self.mesh.n_comp)
@@ -905,6 +905,12 @@ class OvfEngine(xr.backends.BackendEntrypoint):
             notOneDims = ['x', 'y', 'z', 'comp']
             defaultChunks = {}
             if (backend_array.shape != ()):
+                if backend_array.mesh.tmax is None and backend_array.mesh.freq is not None:
+                    defaultChunks['f'] = 1
+                    notOneDims.append('f')
+                for i in range(len(backend_array.dims)):
+                    if backend_array.mesh.freq is not None and backend_array.mesh.tmax is None and backend_array.dims[i] == 't':
+                        backend_array.dims[i] = 'f'
                 for dim in backend_array.dims:
                     if (dim not in notOneDims):
                         defaultChunks[dim] = 1
@@ -915,6 +921,12 @@ class OvfEngine(xr.backends.BackendEntrypoint):
 
             if (backend_array_sc.shape != ()):
                 defaultChunksSc = {}
+                if backend_array_sc.mesh.tmax is None and backend_array_sc.mesh.freq is not None:
+                    defaultChunks['f'] = 1
+                    notOneDims.append('f')
+                for i in range(len(backend_array_sc.dims)):
+                    if backend_array_sc.mesh.freq is not None and backend_array_sc.mesh.tmax is None and backend_array_sc.dims[i] == 't':
+                        backend_array_sc.dims[i] = 'f'
                 for dim in backend_array_sc.dims:
                     if (dim not in notOneDims):
                         defaultChunksSc[dim] = 1
