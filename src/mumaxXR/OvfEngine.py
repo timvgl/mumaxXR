@@ -562,6 +562,21 @@ class OvfBackendArray(xr.backends.BackendArray):
                 footer.append(line)
                 attr, val = line.split(b': ')
                 footer_dict[attr] = val.replace(b"\n", b"")
+            if b'comment' in footer_dict:
+                footer_dict = {}
+                footer = []
+                file.seek(0)
+                file.readline()
+                for i in range(0, 28):
+                    line = file.readline()
+                    # clean up
+                    line = line.replace(b'# ', b'')
+                    line = line.replace(b'Desc: Total simulation time: ', b'tmax: ')
+                    line = line.replace(b'Desc: Time (s) : ', b'tmax: ')
+                    line = line.replace(b'Desc: Frequency:', b'freq: ')
+                    footer.append(line)
+                    attr, val = line.split(b': ')
+                    footer_dict[attr] = val.replace(b"\n", b"")
 
             xnodes = int(footer_dict[b"xnodes"])
             ynodes = int(footer_dict[b"ynodes"])
@@ -609,7 +624,6 @@ class OvfBackendArray(xr.backends.BackendArray):
                 self.dtype = np.float32
 
             isFFT = (b"k_xmin" in footer_dict and b"k_xmax" in footer_dict or b"k_ymin" in footer_dict and b"k_ymax" in footer_dict or b"k_zmin" in footer_dict and b"k_zmax" in footer_dict)
-            
         return MumaxMesh(filename, nodes, world_min, world_max, tmax, freq, n_comp, footer_dict, dtype=self.dtype, isFFT=isFFT)
     
     def get_corresponding_files(self, filename, returnTData=False, type='', returnMeshData=True) -> Union[Tuple[list, np.ndarray], list, np.ndarray]:
