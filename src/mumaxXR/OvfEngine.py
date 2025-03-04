@@ -692,6 +692,7 @@ class OvfBackendArray(xr.backends.BackendArray):
             fileList = np.delete(fileList, self.useEachList, None).tolist()
         print(fileList)
         if (self.tmaxArray is not None and self.tmaxArray.size != len(fileList)):
+            print('hereeeEEe')
             def find_nearest(timeList: list, value: float) -> tuple:
                 array = np.asarray(timeList)
                 idx = (np.abs(timeList - value)).argmin()
