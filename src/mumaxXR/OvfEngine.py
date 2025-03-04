@@ -739,7 +739,7 @@ class OvfBackendArray(xr.backends.BackendArray):
                         elif (nearest[3] == 'higher'):
                             interpolatedfileList.append({(self.tmaxArray[i]): (nearest[1], fileList[nearest[0]-1], nearest[2], fileList[nearest[0]])})
             fileList = interpolatedfileList
-
+        print('here' + str(fileList))
         if returnTData == True:
             lineIndex = get_line_index_t_from_ovf(fileList[0], self.lock)
             if (lineIndex == -1):
