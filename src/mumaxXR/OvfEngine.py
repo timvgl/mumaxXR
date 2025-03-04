@@ -739,6 +739,7 @@ class OvfBackendArray(xr.backends.BackendArray):
             fileList = interpolatedfileList
 
         if returnTData == True:
+            print(fileList)
             lineIndex = get_line_index_t_from_ovf(fileList[0], self.lock)
             if (lineIndex == -1):
                 raise ValueError('Could not find time in ovf file.')
