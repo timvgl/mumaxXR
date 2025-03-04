@@ -629,7 +629,7 @@ class OvfBackendArray(xr.backends.BackendArray):
     def get_corresponding_files(self, filename, returnTData=False, type='', returnMeshData=True) -> Union[Tuple[list, np.ndarray], list, np.ndarray]:
         def get_line_index_t_from_ovf(filename, lock) -> int:
             with lock, open(filename, "rb") as file:
-                for i in range(0, 27):
+                for i in range(0, 28):
                     line = file.readline()
                     # clean up
                     line = line.replace(b'# ', b'')
