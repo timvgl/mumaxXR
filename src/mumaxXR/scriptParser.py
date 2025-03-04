@@ -1,5 +1,8 @@
 import re
 
+# Global environment to hold assigned variables (e.g. operatorskspace)
+global_env = {}
+
 def range_str(a, b):
     # If a+1 equals b, return just a as string; otherwise, return "a-b".
     return str(a) if a + 1 == b else f"{a}-{b}"
@@ -215,3 +218,6 @@ def process_command(cmd):
     else:
         ast = parse_expression(cmd)
         return eval_ast(ast)
+
+def get_globalenv():
+    return global_env
