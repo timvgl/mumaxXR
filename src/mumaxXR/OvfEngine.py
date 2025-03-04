@@ -684,12 +684,13 @@ class OvfBackendArray(xr.backends.BackendArray):
                 raise TypeError
         except TypeError:
             fileList = [filename]
-        print(fileList)
+        
         if (self.useEachNthOvfFile != 0 and self.useEachNthOvfFile != 1):
             if (len(self.useEachList) == 0):
                 useIndices = list(range(0, len(fileList), self.useEachNthOvfFile))
                 self.useEachList = [element for element in list(range(len(fileList))) if element not in useIndices]
             fileList = np.delete(fileList, self.useEachList, None).tolist()
+        print(fileList)
         if (self.tmaxArray is not None and self.tmaxArray.size != len(fileList)):
             def find_nearest(timeList: list, value: float) -> tuple:
                 array = np.asarray(timeList)
