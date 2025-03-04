@@ -684,7 +684,7 @@ class OvfBackendArray(xr.backends.BackendArray):
                 raise TypeError
         except TypeError:
             fileList = [filename]
-        
+        print("looool" + str(fileList))
         if (self.useEachNthOvfFile != 0 and self.useEachNthOvfFile != 1):
             if (len(self.useEachList) == 0):
                 useIndices = list(range(0, len(fileList), self.useEachNthOvfFile))
