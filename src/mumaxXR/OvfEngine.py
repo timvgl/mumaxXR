@@ -636,7 +636,6 @@ class OvfBackendArray(xr.backends.BackendArray):
                     line = line.replace(b'Desc: Total simulation time: ', b'tmax: ')
                     line = line.replace(b'Desc: Time (s) : ', b'tmax: ')
                     line = line.replace(b'Desc: Frequency:', b'freq: ')
-                    print(line)
                     if ('tmax' in line.decode() or 'freq' in line.decode()):
                         return i
             return -1
@@ -672,11 +671,12 @@ class OvfBackendArray(xr.backends.BackendArray):
                     return None
         
         tData = []
-        if (type != ''):
-            try:
-                filename = filename.parent.joinpath(Path(type + str(filename.name)[re.search(r"\d", filename.stem).start():]))
-            except AttributeError:
-                pass
+        if False:
+            if (type != ''):
+                try:
+                    filename = filename.parent.joinpath(Path(type + str(filename.name)[re.search(r"\d", filename.stem).start():]))
+                except AttributeError:
+                    pass
         try:
             if (self.singleLoad == False):
                 fileList = sorted(list(Path(filename).parent.glob('**/' + Path(filename).stem[:Path(filename).stem.check_last_six_chars()+1] + '[0-9][0-9][0-9][0-9][0-9][0-9].ovf')))
@@ -684,18 +684,12 @@ class OvfBackendArray(xr.backends.BackendArray):
                 raise TypeError
         except TypeError:
             fileList = [filename]
-        print("looool" + str(fileList))
-        print(Path(filename).stem)
-        print(Path(filename).stem.check_last_six_chars())
-        print(Path(filename).stem[:Path(filename).stem.check_last_six_chars()+1] + '[0-9][0-9][0-9][0-9][0-9][0-9].ovf')
         if (self.useEachNthOvfFile != 0 and self.useEachNthOvfFile != 1):
             if (len(self.useEachList) == 0):
                 useIndices = list(range(0, len(fileList), self.useEachNthOvfFile))
                 self.useEachList = [element for element in list(range(len(fileList))) if element not in useIndices]
             fileList = np.delete(fileList, self.useEachList, None).tolist()
-        print(fileList)
         if (self.tmaxArray is not None and self.tmaxArray.size != len(fileList)):
-            print('hereeeEEe')
             def find_nearest(timeList: list, value: float) -> tuple:
                 array = np.asarray(timeList)
                 idx = (np.abs(timeList - value)).argmin()
@@ -743,7 +737,6 @@ class OvfBackendArray(xr.backends.BackendArray):
                         elif (nearest[3] == 'higher'):
                             interpolatedfileList.append({(self.tmaxArray[i]): (nearest[1], fileList[nearest[0]-1], nearest[2], fileList[nearest[0]])})
             fileList = interpolatedfileList
-        print('here' + str(fileList))
         if returnTData == True:
             lineIndex = get_line_index_t_from_ovf(fileList[0], self.lock)
             if (lineIndex == -1):
