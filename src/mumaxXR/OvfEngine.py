@@ -636,6 +636,7 @@ class OvfBackendArray(xr.backends.BackendArray):
                     line = line.replace(b'Desc: Total simulation time: ', b'tmax: ')
                     line = line.replace(b'Desc: Time (s) : ', b'tmax: ')
                     line = line.replace(b'Desc: Frequency:', b'freq: ')
+                    print(line)
                     if ('tmax' in line.decode() or 'freq' in line.decode()):
                         return i
             return -1
