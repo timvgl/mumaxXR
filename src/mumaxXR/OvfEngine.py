@@ -685,6 +685,8 @@ class OvfBackendArray(xr.backends.BackendArray):
         except TypeError:
             fileList = [filename]
         print("looool" + str(fileList))
+        print(Path(filename).stem)
+        print(Path(filename).stem.check_last_six_chars())
         print(Path(filename).stem[:Path(filename).stem.check_last_six_chars()+1] + '[0-9][0-9][0-9][0-9][0-9][0-9].ovf')
         if (self.useEachNthOvfFile != 0 and self.useEachNthOvfFile != 1):
             if (len(self.useEachList) == 0):
