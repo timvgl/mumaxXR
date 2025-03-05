@@ -1,6 +1,6 @@
 import re
 
-# Global environment to hold assigned variables (e.g. operatorskspace, nx, etc.)
+# Global environment to hold assigned variables (e.g. operatorskspace, nx, bx, etc.)
 global_env = {}
 
 # Allowed arithmetic functions (safe ones)
@@ -21,16 +21,16 @@ custom_ops = {
 
 # Helper function: Generates a range string similar to mumax.
 def range_str(a, b):
-    # If a+1 equals b, return just a as string; otherwise, return "a-b".
     return str(a) if a + 1 == b else f"{a}-{b}"
 
 # Tokenizer: Recognizes numbers (including scientific notation), identifiers (lowercase only),
-# arithmetic operators, and punctuation (including dot, comma, parentheses, and equal sign).
+# arithmetic operators, and punctuation (including dot, comma, parentheses, equal sign, and colon).
 def tokenize(s):
-    tokens = re.findall(r'\d+(?:\.\d+)?(?:e-?\d+)?|[a-z_]\w*|[+\-*/(),.=]', s)
+    # The regex now will match numbers, identifiers, and the operators.
+    tokens = re.findall(r'\d+(?:\.\d+)?(?:e-?\d+)?|[a-z_]\w*|[:=+\-*/(),.]', s)
     return tokens
 
-# Recursive descent parser for our language.
+# Recursive descent parser that handles both arithmetic and our custom function/member calls.
 def parse_expression(s):
     tokens = tokenize(s)
     pos = 0
@@ -38,7 +38,6 @@ def parse_expression(s):
     # --- Arithmetic parser functions ---
     def parse_primary():
         nonlocal pos
-        # If an expression is parenthesized, consume '(' expression ')'
         if pos < len(tokens) and tokens[pos] == '(':
             pos += 1
             node = parse_expr()
@@ -47,10 +46,8 @@ def parse_expression(s):
             pos += 1
             node = parse_postfix(node)
             return node
-        # Otherwise, the token must be a number or an identifier.
         token = tokens[pos]
         pos += 1
-        # Try to interpret as number.
         try:
             if '.' in token or 'e' in token:
                 node = float(token)
@@ -63,7 +60,6 @@ def parse_expression(s):
 
     def parse_factor():
         nonlocal pos
-        # Handle unary minus.
         if pos < len(tokens) and tokens[pos] == '-':
             op = tokens[pos]
             pos += 1
@@ -98,7 +94,6 @@ def parse_expression(s):
     # --- Postfix processing (for function calls and member accesses) ---
     def parse_postfix(node):
         nonlocal pos
-        # Process function calls: if the next token is '(' then it's a call.
         while pos < len(tokens):
             if tokens[pos] == '(':
                 pos += 1  # Skip '('.
@@ -111,15 +106,18 @@ def parse_expression(s):
                 if pos >= len(tokens) or tokens[pos] != ')':
                     raise Exception("Expected closing parenthesis in function call")
                 pos += 1  # Skip ')'.
-                # Build a call node.
-                node = {"type": "call", "name": node, "args": args} if isinstance(node, str) else {"type": "call", "name": node["value"] if isinstance(node, dict) and node.get("type")=="identifier" else node, "args": args}
+                # If the node is an identifier string, treat it as a function call.
+                if isinstance(node, str):
+                    node = {"type": "call", "name": node, "args": args}
+                else:
+                    # If node is already a node (e.g., from arithmetic), use its evaluated value as the function name.
+                    node = {"type": "call", "name": node, "args": args}
             elif tokens[pos] == '.':
                 pos += 1  # Skip dot.
                 if pos >= len(tokens):
                     raise Exception("Expected member name after dot")
                 member = tokens[pos]
                 pos += 1
-                # Check if this is a member call.
                 if pos < len(tokens) and tokens[pos] == '(':
                     pos += 1  # Skip '('.
                     args = []
@@ -138,7 +136,6 @@ def parse_expression(s):
                 break
         return node
 
-    # --- Begin parsing ---
     node = parse_expr()
     if pos != len(tokens):
         raise Exception("Unexpected tokens remaining: " + " ".join(tokens[pos:]))
@@ -146,16 +143,13 @@ def parse_expression(s):
 
 # Evaluator: Recursively processes the AST to build the final name or evaluate arithmetic.
 def eval_ast(node):
-    # If node is a number, return it.
     if isinstance(node, (int, float)):
         return node
-    # If node is a string, check global environment or return as is.
     if isinstance(node, str):
         if node == "emptyoperator":
             return ""
         return global_env[node] if node in global_env else node
 
-    # Binary operator node.
     if isinstance(node, dict) and node.get("type") == "binary":
         left = eval_ast(node["left"])
         right = eval_ast(node["right"])
@@ -171,7 +165,6 @@ def eval_ast(node):
         else:
             raise Exception(f"Unknown binary operator: {op}")
 
-    # Unary operator node.
     if isinstance(node, dict) and node.get("type") == "unary":
         operand = eval_ast(node["operand"])
         op = node["op"]
@@ -180,15 +173,11 @@ def eval_ast(node):
         else:
             raise Exception(f"Unknown unary operator: {op}")
 
-    # Handle our call nodes.
     if isinstance(node, dict) and node.get("type") == "call":
         op = node["name"]
-        # If op is not a string (could be an arithmetic result) then just evaluate the call
         if not isinstance(op, str):
             op = eval_ast(op)
-        # Check if this is one of our custom operators.
         if op in custom_ops:
-            # Custom functions:
             if op == "fft3d":
                 parent_name = eval_ast(node["args"][0])
                 return parent_name + "_k_x_y_z"
@@ -239,7 +228,6 @@ def eval_ast(node):
                 return "_zrange" + range_str(z1, z2)
             if op == "mergeoperators":
                 evaluated_args = [eval_ast(arg) for arg in node["args"]]
-                # If the only argument is emptyoperator (empty string), return empty string.
                 if len(evaluated_args) == 1 and evaluated_args[0] == "":
                     return ""
                 merged = ""
@@ -248,15 +236,12 @@ def eval_ast(node):
                 return merged
             raise Exception(f"Unknown custom function: {op}")
         else:
-            # If not a custom op, assume it is an arithmetic function call.
-            # Evaluate all arguments.
             evaluated_args = [eval_ast(arg) for arg in node["args"]]
             if op in allowed_functions:
                 return allowed_functions[op](*evaluated_args)
             else:
                 raise Exception(f"Unknown function: {op}")
 
-    # Member call.
     if isinstance(node, dict) and node.get("type") == "member_call":
         obj_name = eval_ast(node["object"])
         member = node["name"]
@@ -278,16 +263,16 @@ def eval_ast(node):
         else:
             raise Exception(f"Unknown member function: {member}")
 
-    # Member access.
     if isinstance(node, dict) and node.get("type") == "member_access":
         return eval_ast(node["object"]) + "_" + node["name"]
 
     raise Exception(f"Unknown node structure: {node}")
 
 # Process a command string.
-# If the command contains an assignment (=), the variable is stored in global_env.
+# If the command contains an assignment using either "=" or ":=", the variable is stored in global_env.
 def process_command(cmd):
     cmd = cmd.strip()
+    # Check for ":=" assignment first.
     if ":=" in cmd:
         varname, expr_str = cmd.split(":=", 1)
         varname = varname.strip().lower()
@@ -297,6 +282,7 @@ def process_command(cmd):
         global_env[varname] = value
         return f"{varname} defined as {value}"
     elif "=" in cmd:
+        # Otherwise, use "=" assignment.
         varname, expr_str = cmd.split("=", 1)
         varname = varname.strip().lower()
         expr_str = expr_str.strip()
