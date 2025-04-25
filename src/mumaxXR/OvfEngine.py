@@ -62,24 +62,25 @@ def castableList(inputList):
             return False
     except TypeError:
         return False
-
-class custom_list():
-    def isinstance_recursive(self, checkType, maxDepth=-1, currentDepth=0):
-        isTypeList = []
-        for self_ in self:
-            if (castableList(self_) and (maxDepth != -1 and currentDepth != maxDepth or maxDepth == -1)):
-                currentDepth += 1
-                isTypeList.append(list(self_).isinstance_recursive(checkType, maxDepth=maxDepth, currentDepth=currentDepth))
-            else:
-                isTypeList.append(isinstance(self_, checkType))
-        if (False in isTypeList):
-            return False
+def _isinstance_recursive(data, checkType):
+        if isinstance(data, (list, tuple)):
+            for element in data:
+                # Rekursiver Aufruf: Sobald ein Element nicht den Anforderungen entspricht,
+                # wird sofort False zurückgegeben
+                if not _isinstance_recursive(element, checkType):
+                    return False
+            return True  # Alle Elemente in der Liste haben die Prüfung bestanden
         else:
-            return True
+            # Wenn data kein Liste ist: direkt überprüfen, ob es sich um target_type handelt
+            return isinstance(data, checkType)
+class custom_list():
+    def isinstance_recursive(self, checkType):
+        return _isinstance_recursive(self, checkType)
+    
     def is_homogenious(self):
         try:
-            np.asarray(self)
-            return True
+            arr = np.asarray(self)
+            return arr.dtype != object
         except ValueError:
             return False
         
@@ -172,8 +173,11 @@ class OvfBackendArray(xr.backends.BackendArray):
         coordsParam = None
         if (len(self.dirListToConcat) > 0):
             self.dirListToConcat = [Path(ovfFile) for ovfFile in self.dirListToConcat]
-            if (self.filename_or_obj not in self.dirListToConcat):
-                self.dirListToConcat = [self.filename_or_obj] + self.dirListToConcat
+            if (self.filename_or_obj not in self.dirListToConcat and not self.filename_or_obj.parent in self.dirListToConcat):
+                if self.filename_or_obj.parent in self.dirListToConcat:
+                    self.dirListToConcat[self.dirListToConcat.index(self.filename_or_obj.parent)] = self.filename_or_obj
+                else:
+                    self.dirListToConcat = [self.filename_or_obj] + self.dirListToConcat
             if (self.sweepName == ''):
                 self.sweepName = "unknown"
             if (isinstance(self.sweepParam, list)):
@@ -194,11 +198,31 @@ class OvfBackendArray(xr.backends.BackendArray):
                         else:
                             warnings.warn('Too many labels for sweep labeling found. Trimming ...')
                             self.sweepName = self.sweepName[:len(list(coordsParam[0]))]
-                    sortIndices = []
-                    for row in sorted(self.sweepParam):
-                        sortIndices.append(self.sweepParam.index(row))
-                    self.dirListToConcat = [self.dirListToConcat[i] for i in sortIndices]
+                    if False:
+                        sortIndices = []
+                        for row in sorted(self.sweepParam):
+                            sortIndices.append(self.sweepParam.index(row))
+                        unsorted = self.dirListToConcat 
+                        print(self.dirListToConcat)
+                        print("-----------------------------")
+                        tmpDirListToConcat = [self.dirListToConcat[i] for i in sortIndices]
+                        self.dirListToConcat = tmpDirListToConcat
+                        print(self.dirListToConcat)
+                        if sorted(self.sweepParam) == self.sweepParam and not unsorted == self.dirListToConcat:
+                            print(sorted(self.sweepParam) == self.sweepParam)
+                            raise ValueError('Provided coords are not sorted. Tuples or lists in list must be sorted for all entries.')
+                    else:
+                        pairs = list(zip(self.sweepParam, self.dirListToConcat))
+                        # 2) lex-sortiert nach Euren Param-Listen (das funktioniert auch für mehrere Achsen)
+                        pairs.sort(key=lambda x: tuple(x[0]))
+                        # 3) wieder entpacken
+                        self.sweepParam, self.dirListToConcat = zip(*pairs)
+                        self.sweepParam = list(self.sweepParam)
+                        self.dirListToConcat = list(self.dirListToConcat)
                 else:
+                    print(len(self.sweepParam) > 0)
+                    print(self.sweepParam.isinstance_recursive((int, float)))
+                    print(self.sweepParam.is_homogenious())
                     raise ValueError('Provided coords are not homogenious. Tuples or lists in list must be the same size for all entries.')
                 
         startingFileName = ''
@@ -482,6 +506,7 @@ class OvfBackendArray(xr.backends.BackendArray):
             negativeEnd = -4
         else:
             negativeEnd = -3
+        negativeEnd = self.fileList.ndim
         filenames = self.fileList[tuple(list(key)[:negativeEnd])]
         if not isinstance(filenames, np.ndarray):
             filenames = np.asarray([filenames])
@@ -700,7 +725,6 @@ class OvfBackendArray(xr.backends.BackendArray):
                     return (idx, timeList[idx-1], smallestDiffValue, 'higher')
                 else:
                     return tuple([idx, smallestDiffValue])
-            
             lineIndex = get_line_index_t_from_ovf(fileList[0], self.lock)
             if (lineIndex == -1):
                 raise ValueError('Could not find time in ovf file.')  
@@ -901,6 +925,7 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                         backend_array.dims[i] = 'f'
                 var = xr.Variable(dims=backend_array.dims, data=data)
                 var.encoding["preferred_chunks"] = defaultChunks
+                var.encoding["chunksizes"] = defaultChunks
             if (backend_array_sc.shape != ()):
                 for i in range(len(backend_array_sc.dims)):
                     if backend_array_sc.dims[i] in replaceDims:
@@ -909,6 +934,7 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                         backend_array_sc.dims[i] = 'f'
                 varSc = xr.Variable(dims=backend_array_sc.dims, data=dataSc)
                 varSc.encoding["preferred_chunks"] = defaultChunksSc
+                varSc.encoding["chunksizes"] = defaultChunksSc
             if (backend_array_sc.shape != () and backend_array.shape != ()):
                 dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims + ['wavetypeSc'], backend_array.coords + [backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])))
             elif (backend_array_sc.shape != () and backend_array.shape == ()):
@@ -950,9 +976,11 @@ class OvfEngine(xr.backends.BackendEntrypoint):
             if (backend_array.shape != ()):
                 var = xr.Variable(dims=backend_array.dims, data=data)
                 var.encoding["preferred_chunks"] = defaultChunks
+                var.encoding["chunksizes"] = defaultChunks
             if (backend_array_sc.shape != ()):
                 varSc = xr.Variable(dims=backend_array_sc.dims, data=dataSc)
                 varSc.encoding["preferred_chunks"] = defaultChunksSc
+                varSc.encoding["chunksizes"] = defaultChunksSc
             if (backend_array_sc.shape != () and backend_array.shape != ()):
                 dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims + ['wavetypeSc'], backend_array.coords + [backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])))
             elif (backend_array_sc.shape != () and backend_array.shape == ()):
