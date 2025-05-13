@@ -701,6 +701,7 @@ class OvfBackendArray(xr.backends.BackendArray):
             if (type != ''):
                 try:
                     filename = filename.parent.joinpath(Path(type + str(filename.name)[re.search(r"(\d{6})$", filename.stem).start():]))
+                    print("yaaaaa")
                     print(filename)
                 except AttributeError:
                     pass
