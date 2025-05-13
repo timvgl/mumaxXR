@@ -155,15 +155,15 @@ def eval_ast(node):
         right = eval_ast(node["right"])
         op = node["op"]
         if op == '+':
-            return float(left) + float(right)
+            return left + right
         elif op == '-':
-            return float(left) - float(right)
+            return left - right
         elif op == '*':
-            return float(left) * float(right)
+            return left * right
         elif op == '/':
-            return float(left) / float(right)
+            return left / right
         elif op == '%':
-            return float(left) % float(right)
+            return left % right
         else:
             raise Exception(f"Unknown binary operator: {op}")
 
