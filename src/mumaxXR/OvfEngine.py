@@ -925,7 +925,7 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                         backend_array.dims[i] = 'f'
                 var = xr.Variable(dims=backend_array.dims, data=data)
                 var.encoding["preferred_chunks"] = defaultChunks
-                var.encoding["chunksizes"] = defaultChunks
+                var.encoding["chunksizes"] = tuple([defaultChunks[dim] for dim in backend_array.dims])
             if (backend_array_sc.shape != ()):
                 for i in range(len(backend_array_sc.dims)):
                     if backend_array_sc.dims[i] in replaceDims:
@@ -934,7 +934,7 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                         backend_array_sc.dims[i] = 'f'
                 varSc = xr.Variable(dims=backend_array_sc.dims, data=dataSc)
                 varSc.encoding["preferred_chunks"] = defaultChunksSc
-                varSc.encoding["chunksizes"] = defaultChunksSc
+                varSc.encoding["chunksizes"] = tuple([defaultChunksSc[dim] for dim in backend_array_sc.dims]) 
             if (backend_array_sc.shape != () and backend_array.shape != ()):
                 dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims + ['wavetypeSc'], backend_array.coords + [backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])))
             elif (backend_array_sc.shape != () and backend_array.shape == ()):
@@ -976,11 +976,11 @@ class OvfEngine(xr.backends.BackendEntrypoint):
             if (backend_array.shape != ()):
                 var = xr.Variable(dims=backend_array.dims, data=data)
                 var.encoding["preferred_chunks"] = defaultChunks
-                var.encoding["chunksizes"] = defaultChunks
+                var.encoding["chunksizes"] = tuple([defaultChunks[dim] for dim in backend_array.dims])
             if (backend_array_sc.shape != ()):
                 varSc = xr.Variable(dims=backend_array_sc.dims, data=dataSc)
                 varSc.encoding["preferred_chunks"] = defaultChunksSc
-                varSc.encoding["chunksizes"] = defaultChunksSc
+                varSc.encoding["chunksizes"] = tuple([defaultChunksSc[dim] for dim in backend_array_sc.dims])
             if (backend_array_sc.shape != () and backend_array.shape != ()):
                 dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims + ['wavetypeSc'], backend_array.coords + [backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])))
             elif (backend_array_sc.shape != () and backend_array.shape == ()):
