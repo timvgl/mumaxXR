@@ -25,7 +25,7 @@ jobs:
           pip install setuptools wheel build
       - name: Cleanup
         run: |
-          rm dist/*
+          rm -f dist/* || true
       - name: Build package
         run: |
           python -m build  # Could also be python -m build
