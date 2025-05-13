@@ -355,13 +355,11 @@ class OvfBackendArray(xr.backends.BackendArray):
                 else:
                     dims = ['wavetypeSc', 't', 'z', 'y', 'x']
                 fileList = [None]
-                print(self.wavetype)
                 if (self.tmaxArray is None):
                     fileList[0], self.tmaxArray = self.get_corresponding_files(self.filename_or_obj, type=self.wavetype[0], returnTData=True)
                 else:
                     fileList[0] = self.get_corresponding_files(self.filename_or_obj, returnTData=False)
                 for type in self.wavetype[1:]:
-                    print(type)
                     fileList.append(self.get_corresponding_files(self.filename_or_obj, type=type))
                 if self.sc == False:
                     coords = [np.array(self.wavetype), self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
@@ -703,10 +701,12 @@ class OvfBackendArray(xr.backends.BackendArray):
             if (type != ''):
                 try:
                     filename = filename.parent.joinpath(Path(type + str(filename.name)[re.search(r"(\d{6})$", filename.stem).start():]))
+                    print(filename)
                 except AttributeError:
                     pass
         try:
             if (self.singleLoad == False):
+                print(filename)
                 fileList = sorted(list(Path(filename).parent.glob('**/' + Path(filename).stem[:Path(filename).stem.check_last_six_chars()+1] + '[0-9][0-9][0-9][0-9][0-9][0-9].ovf')))
             else:
                 raise TypeError
