@@ -499,7 +499,6 @@ class OvfBackendArray(xr.backends.BackendArray):
         self.dims = dims
         self.coords = coords
         self.shape = shape
-        print(fileList)
         return fileList
     
     def _raw_indexing_method(self, key: tuple) -> np.ndarray:
@@ -699,16 +698,11 @@ class OvfBackendArray(xr.backends.BackendArray):
         tData = []
         if (type != ''):
             try:
-                print(type)
-                print(str(filename.name))
                 filename = filename.parent.joinpath(Path(type + str(filename.name)[re.search(r"(\d{6})$", filename.stem).start():]))
-                print("yaaaaa")
-                print(filename)
             except AttributeError:
                 pass
         try:
             if (self.singleLoad == False):
-                print(filename)
                 fileList = sorted(list(Path(filename).parent.glob('**/' + Path(filename).stem[:Path(filename).stem.check_last_six_chars()+1] + '[0-9][0-9][0-9][0-9][0-9][0-9].ovf')))
             else:
                 raise TypeError
