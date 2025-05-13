@@ -700,6 +700,8 @@ class OvfBackendArray(xr.backends.BackendArray):
         if False:
             if (type != ''):
                 try:
+                    print(type)
+                    print(str(filename.name))
                     filename = filename.parent.joinpath(Path(type + str(filename.name)[re.search(r"(\d{6})$", filename.stem).start():]))
                     print("yaaaaa")
                     print(filename)
