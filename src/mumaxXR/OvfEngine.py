@@ -499,6 +499,7 @@ class OvfBackendArray(xr.backends.BackendArray):
         self.dims = dims
         self.coords = coords
         self.shape = shape
+        print(fileList)
         return fileList
     
     def _raw_indexing_method(self, key: tuple) -> np.ndarray:
