@@ -355,11 +355,13 @@ class OvfBackendArray(xr.backends.BackendArray):
                 else:
                     dims = ['wavetypeSc', 't', 'z', 'y', 'x']
                 fileList = [None]
+                print(self.wavetype)
                 if (self.tmaxArray is None):
                     fileList[0], self.tmaxArray = self.get_corresponding_files(self.filename_or_obj, type=self.wavetype[0], returnTData=True)
                 else:
                     fileList[0] = self.get_corresponding_files(self.filename_or_obj, returnTData=False)
                 for type in self.wavetype[1:]:
+                    print(type)
                     fileList.append(self.get_corresponding_files(self.filename_or_obj, type=type))
                 if self.sc == False:
                     coords = [np.array(self.wavetype), self.tmaxArray, self.mesh.get_axis(2), self.mesh.get_axis(1), self.mesh.get_axis(0), np.arange(self.mesh.n_comp)]
