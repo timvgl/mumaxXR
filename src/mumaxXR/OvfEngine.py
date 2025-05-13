@@ -697,16 +697,15 @@ class OvfBackendArray(xr.backends.BackendArray):
                     return None
         
         tData = []
-        if False:
-            if (type != ''):
-                try:
-                    print(type)
-                    print(str(filename.name))
-                    filename = filename.parent.joinpath(Path(type + str(filename.name)[re.search(r"(\d{6})$", filename.stem).start():]))
-                    print("yaaaaa")
-                    print(filename)
-                except AttributeError:
-                    pass
+        if (type != ''):
+            try:
+                print(type)
+                print(str(filename.name))
+                filename = filename.parent.joinpath(Path(type + str(filename.name)[re.search(r"(\d{6})$", filename.stem).start():]))
+                print("yaaaaa")
+                print(filename)
+            except AttributeError:
+                pass
         try:
             if (self.singleLoad == False):
                 print(filename)
