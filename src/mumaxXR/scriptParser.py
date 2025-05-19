@@ -15,7 +15,7 @@ allowed_functions = {
 # Set of custom operator names that our language uses (and should not be treated as arithmetic calls)
 custom_ops = {
     "fft3d", "fft4d", "fft_t", "cropx", "expandx", "cropy", "expandy", "cropz", "expandz",
-    "croplayer", "crop", "cropoperator", "expand", "cropxoperator", "expandxoperator", "cropyoperator",
+    "croplayer", "crop", "cropoperator", "expand", "expandoperator", "cropxoperator", "expandxoperator", "cropyoperator",
     "expandyoperator", "cropzoperator", "expandzoperator", "mergeoperators"
 }
 
