@@ -1,4 +1,5 @@
 import re
+import numpy as np
 
 # Global environment to hold assigned variables (e.g. operatorskspace, nx, bx, etc.)
 global_env = {}
@@ -17,6 +18,10 @@ custom_ops = {
     "fft3d", "fft4d", "fft_t", "cropx", "expandx", "cropy", "expandy", "cropz", "expandz",
     "croplayer", "crop", "cropoperator", "expand", "expandoperator", "cropxoperator", "expandxoperator", "cropyoperator",
     "expandyoperator", "cropzoperator", "expandzoperator", "mergeoperators"
+}
+
+constants = {
+    "pi":    np.pi
 }
 
 # Helper function: Generates a range string similar to mumax.
@@ -148,6 +153,8 @@ def eval_ast(node):
     if isinstance(node, str):
         if node == "emptyoperator":
             return ""
+        if node in constants:
+            return constants[node]
         return global_env[node] if node in global_env else node
 
     if isinstance(node, dict) and node.get("type") == "binary":
