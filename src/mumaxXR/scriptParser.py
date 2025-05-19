@@ -15,7 +15,7 @@ allowed_functions = {
 # Set of custom operator names that our language uses (and should not be treated as arithmetic calls)
 custom_ops = {
     "fft3d", "fft4d", "fft_t", "cropx", "expandx", "cropy", "expandy", "cropz", "expandz",
-    "croplayer", "crop", "expand", "cropxoperator", "expandxoperator", "cropyoperator",
+    "croplayer", "crop", "cropoperator", "expand", "cropxoperator", "expandxoperator", "cropyoperator",
     "expandyoperator", "cropzoperator", "expandzoperator", "mergeoperators"
 }
 
@@ -205,7 +205,7 @@ def eval_ast(node):
             if op == "croplayer":
                 layer = eval_ast(node["args"][1])
                 return eval_ast(node["args"][0]) + "_zrange" + range_str(layer, layer + 1)
-            if op in ["crop", "expand"]:
+            if op in ["crop", "expand", "cropoperator", "expandoperator"]:
                 if len(node["args"]) < 7:
                     raise Exception(f"Not enough arguments for {op}")
                 x1 = eval_ast(node["args"][1])
@@ -215,6 +215,8 @@ def eval_ast(node):
                 z1 = eval_ast(node["args"][5])
                 z2 = eval_ast(node["args"][6])
                 suffix = "_xrange" + range_str(x1, x2) + "_yrange" + range_str(y1, y2) + "_zrange" + range_str(z1, z2)
+                if op in ["cropoperator", "expandoperator"]:
+                    return suffix
                 return eval_ast(node["args"][0]) + suffix
             if op in ["cropxoperator", "expandxoperator"]:
                 x1 = eval_ast(node["args"][0])
