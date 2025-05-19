@@ -212,7 +212,7 @@ def eval_ast(node):
             if op == "croplayer":
                 layer = eval_ast(node["args"][1])
                 return eval_ast(node["args"][0]) + "_zrange" + range_str(layer, layer + 1)
-            if op in ["crop", "expand", "cropoperator", "expandoperator"]:
+            if op in ["crop", "expand"]:
                 if len(node["args"]) < 7:
                     raise Exception(f"Not enough arguments for {op}")
                 x1 = eval_ast(node["args"][1])
@@ -222,9 +222,18 @@ def eval_ast(node):
                 z1 = eval_ast(node["args"][5])
                 z2 = eval_ast(node["args"][6])
                 suffix = "_xrange" + range_str(x1, x2) + "_yrange" + range_str(y1, y2) + "_zrange" + range_str(z1, z2)
-                if op in ["cropoperator", "expandoperator"]:
-                    return suffix
                 return eval_ast(node["args"][0]) + suffix
+            if op in ["cropoperator", "expandoperator"]:
+                if len(node["args"]) < 6:
+                    raise Exception(f"Not enough arguments for {op}")
+                x1 = eval_ast(node["args"][0])
+                x2 = eval_ast(node["args"][1])
+                y1 = eval_ast(node["args"][2])
+                y2 = eval_ast(node["args"][3])
+                z1 = eval_ast(node["args"][4])
+                z2 = eval_ast(node["args"][5])
+                suffix = "_xrange" + range_str(x1, x2) + "_yrange" + range_str(y1, y2) + "_zrange" + range_str(z1, z2)
+                return suffix
             if op in ["cropxoperator", "expandxoperator"]:
                 x1 = eval_ast(node["args"][0])
                 x2 = eval_ast(node["args"][1])
