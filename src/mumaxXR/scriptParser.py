@@ -221,7 +221,7 @@ def eval_ast(node):
                 y2 = eval_ast(node["args"][4])
                 z1 = eval_ast(node["args"][5])
                 z2 = eval_ast(node["args"][6])
-                suffix = "_xrange" + range_str(x1, x2) + "_yrange" + range_str(y1, y2) + "_zrange" + range_str(z1, z2)
+                suffix = "_xrange" + range_str(x1, x2) + "yrange" + range_str(y1, y2) + "zrange" + range_str(z1, z2)
                 return eval_ast(node["args"][0]) + suffix
             if op in ["cropoperator", "expandoperator"]:
                 if len(node["args"]) < 6:
@@ -232,7 +232,10 @@ def eval_ast(node):
                 y2 = eval_ast(node["args"][3])
                 z1 = eval_ast(node["args"][4])
                 z2 = eval_ast(node["args"][5])
-                suffix = "_xrange" + range_str(x1, x2) + "_yrange" + range_str(y1, y2) + "_zrange" + range_str(z1, z2)
+                if "nz" in global_env and global_env["nz"] > 1 or "tz" in global_env and "dz" in global_env and int(tz/dz) > 1:
+                    suffix = "_xrange" + range_str(x1, x2) + "yrange" + range_str(y1, y2) + "zrange" + range_str(z1, z2)
+                else:
+                    suffix = "_xrange" + range_str(x1, x2) + "yrange" + range_str(y1, y2)
                 return suffix
             if op in ["cropxoperator", "expandxoperator"]:
                 x1 = eval_ast(node["args"][0])
