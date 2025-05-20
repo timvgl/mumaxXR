@@ -232,7 +232,7 @@ def eval_ast(node):
                 y2 = eval_ast(node["args"][3])
                 z1 = eval_ast(node["args"][4])
                 z2 = eval_ast(node["args"][5])
-                if "nz" in global_env and global_env["nz"] > 1 or "tz" in global_env and "dz" in global_env and int(tz/dz) > 1:
+                if "nz" in global_env and global_env["nz"] > 1 or "tz" in global_env and "dz" in global_env and int(global_env["tz"]/global_env["dz"]) > 1:
                     suffix = "_xrange" + range_str(x1, x2) + "yrange" + range_str(y1, y2) + "zrange" + range_str(z1, z2)
                 else:
                     suffix = "_xrange" + range_str(x1, x2) + "yrange" + range_str(y1, y2)
