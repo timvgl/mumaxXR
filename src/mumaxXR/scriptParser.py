@@ -21,12 +21,39 @@ allowed_functions = {
 custom_ops = {
     "fft3d", "fft4d", "fft_t", "cropx", "expandx", "cropy", "expandy", "cropz", "expandz",
     "croplayer", "crop", "cropoperator", "expand", "expandoperator", "cropxoperator", "expandxoperator", "cropyoperator",
-    "expandyoperator", "cropzoperator", "expandzoperator", "mergeoperators"
+    "expandyoperator", "cropzoperator", "expandzoperator", "mergeoperators", "cropk","cropkx","cropky","cropkz","cropkxy",
+    "cropkoperator","cropkxoperator","cropkyoperator","cropkzoperator","cropkxyoperator"
 }
 
 constants = {
     "pi":    np.pi
 }
+
+class OperatorSpec:
+    """Hold the type (e.g. 'cropkxy') and its float parameters."""
+    op: str
+    params: tuple
+
+mesh_sizes = {}
+
+def iceil(x): return int(np.ceil(x))
+def ifloor(x): return int(np.floor(x))
+
+def init_mesh_for(name):
+    # whenever a base quantity like "m" is first seen, we assume a full mesh:
+    # it must have been defined by Tx,dx etc → we already put nx,ny,nz in global_env
+    if "nx" in global_env and "ny" in global_env and "nz" in global_env:
+        mesh_sizes[name] = [global_env["nx"], global_env["ny"], global_env["nz"]]
+
+# Call this right after you see an assignment to Tx,Ty,Tz,dx,dy,dz:
+#    init_mesh_for("m")    # or whatever your base quantity is called
+
+# --- 2) Whenever you crop or expand, update mesh_sizes[newName]: -----------
+def update_mesh_after_crop(parent_name, new_name, x1,x2,y1,y2,z1,z2):
+    mesh_sizes[new_name] = [ x2-x1, y2-y1, z2-z1 ]
+
+def update_mesh_after_expand(parent_name, new_name, x1,x2,y1,y2,z1,z2):
+    mesh_sizes[new_name] = [ x2-x1, y2-y1, z2-z1 ]
 
 # Helper function: Generates a range string similar to mumax.
 def range_str(a, b):
@@ -191,13 +218,119 @@ def eval_ast(node):
         if not isinstance(op, str):
             op = eval_ast(op)
         if op in custom_ops:
+            if op in ["cropk","cropkx","cropky","cropkz","cropkxy"]:
+                parent = eval_ast(node["args"][0])
+                # ensure we know its mesh
+                if parent not in mesh_sizes:
+                    init_mesh_for(parent)
+                nx, ny, nz = mesh_sizes[parent]
+                dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
+                # helper to compute ceil/floor indices
+                symmetricX = global_env.get("negativekx", "true") == "true"
+                # now dispatch
+                if op == "cropk":
+                    kx0, kx1, ky0, ky1, kz0, kz1 = [eval_ast(a) for a in node["args"][1:7]]
+                    # mumax uses startIndexX = symmetricX? nx/2 : (NegativeKX? nx/2 : 0)
+                    startX = nx/2
+                    x1 = iceil(startX + kx0*nx*dx)
+                    x2 = ifloor(startX + kx1*nx*dx)
+                    y1 = iceil(ny/2 + ky0*ny*dy)
+                    y2 = ifloor(ny/2 + ky1*ny*dy)
+                    z1 = iceil(nz/2 + kz0*nz*dz)
+                    z2 = ifloor(nz/2 + kz1*nz*dz)
+                    name = f"{parent}_xrange{range_str(x1, x2)}yrange{range_str(y1, y2)}zrange{range_str(z1, z2)}"
+                    update_mesh_after_crop(parent, name, x1,x2,y1,y2,z1,z2)
+                    return name
+    
+                if op == "cropkx":
+                    kx0, kx1 = [eval_ast(a) for a in node["args"][1:3]]
+                    startX = nx/2
+                    x1 = iceil(startX + kx0*nx*dx)
+                    x2 = ifloor(startX + kx1*nx*dx)
+                    name = f"{parent}_xrange{range_str(x1, x2)}"
+                    update_mesh_after_crop(parent, name, x1,x2, 0,ny, 0,nz)
+                    return name
+    
+                if op == "cropky":
+                    ky0, ky1 = [eval_ast(a) for a in node["args"][1:3]]
+                    y1 = iceil(ny/2 + ky0*ny*dy)
+                    y2 = ifloor(ny/2 + ky1*ny*dy)
+                    name = f"{parent}_yrange{range_str(y1, y2)}"
+                    update_mesh_after_crop(parent, name, 0,nx, y1,y2, 0,nz)
+                    return name
+    
+                if op == "cropkz":
+                    kz0, kz1 = [eval_ast(a) for a in node["args"][1:3]]
+                    z1 = iceil(nz/2 + kz0*nz*dz)
+                    z2 = ifloor(nz/2 + kz1*nz*dz)
+                    name = f"{parent}_zrange{range_str(z1, z2)}"
+                    update_mesh_after_crop(parent, name, 0,nx, 0,ny, z1,z2)
+                    return name
+    
+                if op == "cropkxy":
+                    kx0, kx1, ky0, ky1 = [eval_ast(a) for a in node["args"][1:5]]
+                    startX = nx/2
+                    x1 = iceil(startX + kx0*nx*dx)
+                    x2 = ifloor(startX + kx1*nx*dx)
+                    y1 = iceil(ny/2 + ky0*ny*dy)
+                    y2 = ifloor(ny/2 + ky1*ny*dy)
+                    name = f"{parent}_xrange{range_str(x1, x2)}yrange{range_str(y1, y2)}"
+                    update_mesh_after_crop(parent, name, x1,x2, y1,y2, 0,nz)
+                    return name
+            if op in ["cropkoperator","cropkxoperator","cropkyoperator","cropkzoperator","cropkxyoperator"]:
+                args = [eval_ast(a) for a in node["args"]]
+                return OperatorSpec(op=op.replace("operator", ""), params=tuple(args))
+                
             if op == "fft3d":
                 parent_name = eval_ast(node["args"][0])
                 return parent_name + "_k_x_y_z"
             if op == "fft4d":
                 parent_name = eval_ast(node["args"][0])
-                op_suffix = global_env.get("operatorskspace", "")
-                return parent_name + "_k_x_y_z" + op_suffix + "_f"
+                parent_mesh = mesh_sizes[parent_name]
+                nx, ny, nz = parent_mesh
+                dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
+            
+                final_suffix = []
+                for item in global_env.get("operatorskspace", []):
+                    if isinstance(item, OperatorSpec):
+                        # compute exactly as before, based on spec.op and spec.params
+                        spec = item
+                        if spec.op=="cropk":
+                            kx0, kx1, ky0, ky1, kz0, kz1 = spec.params
+                            startX = 0
+                            if global_env.get("negativekx", "true") == "true":
+                                startX = nx/2
+                            x1 = iceil(startX + kx0*nx*dx); x2 = ifloor(startX + kx1*nx*dx)
+                            y1 = iceil(ny/2 + ky0*ny*dy); y2 = ifloor(ny/2 + ky1*ny*dy)
+                            z1 = iceil(nz/2 + kz0*nz*dz); z2 = ifloor(nz/2 + kz1*nz*dz)
+                            final_suffix.append(f"_xrange{range_str(x1, x2)}yrange{range_str(y1, y2)}")
+                        if spec.op=="cropkx":
+                            kx0, kx1 = spec.params
+                            startX = 0
+                            if global_env.get("negativekx", "true") == "true":
+                                startX = nx/2
+                            x1 = iceil(startX + kx0*nx*dx); x2 = ifloor(startX + kx1*nx*dx)
+                            final_suffix.append(f"_xrange{range_str(x1, x2)}")
+                        if spec.op=="cropky":
+                            ky0, ky1 = spec.params
+                            y1 = iceil(ny/2 + ky0*ny*dy); y2 = ifloor(ny/2 + ky1*ny*dy)
+                            final_suffix.append(f"_yrange{range_str(y1, y2)}")
+                        if spec.op=="cropkz":
+                            kz0, kz1 = spec.params
+                            z1 = iceil(nz/2 + kz0*nz*dz); z2 = ifloor(nz/2 + kz1*nz*dz)
+                            final_suffix.append(f"_zrange{range_str(z1, z2)}")
+                        if spec.op=="cropkxy":
+                            kx0, kx1, ky0, ky1 = spec.params
+                            startX = 0
+                            if global_env.get("negativekx", "true") == "true":
+                                startX = nx/2
+                            x1 = iceil(startX + kx0*nx*dx); x2 = ifloor(startX + kx1*nx*dx)
+                            y1 = iceil(ny/2 + ky0*ny*dy); y2 = ifloor(ny/2 + ky1*ny*dy)
+                            final_suffix.append(f"_xrange{range_str(x1, x2)}yrange{range_str(y1, y2)}")
+                    else:
+                        final_suffix.append(item)
+            
+                return parent_name + "_k_x_y_z" + "".join(final_suffix) + "_f"
             if op == "fft_t":
                 parent_name = eval_ast(node["args"][0])
                 return parent_name + "_f"
@@ -254,13 +387,17 @@ def eval_ast(node):
                 z2 = eval_ast(node["args"][1])
                 return "_zrange" + range_str(z1, z2)
             if op == "mergeoperators":
-                evaluated_args = [eval_ast(arg) for arg in node["args"]]
-                if len(evaluated_args) == 1 and evaluated_args[0] == "":
-                    return ""
-                merged = ""
-                for arg in evaluated_args:
-                    merged += arg
-                return merged
+                specs = []
+                for a in node["args"]:
+                    v = eval_ast(a)
+                    if isinstance(v, OperatorSpec):
+                        specs.append(v)
+                    elif isinstance(v, str):
+                        # ignore empty, or plain suffix strings if you still use those
+                        specs.append(v)
+                # store the list for FFT4D:
+                global_env["operatorskspace"] = specs
+                return ""  # mergeoperators itself yields no direct suffix here
             raise Exception(f"Unknown custom function: {op}")
         else:
             evaluated_args = [eval_ast(arg) for arg in node["args"]]
