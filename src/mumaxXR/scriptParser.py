@@ -279,6 +279,8 @@ def eval_ast(node):
                     return name
             if op in ["cropkoperator","cropkxoperator","cropkyoperator","cropkzoperator","cropkxyoperator"]:
                 args = [eval_ast(a) for a in node["args"]]
+                print("opsssss")
+                print(op)
                 return OperatorSpec(op=op.replace("operator", ""), params=tuple(args))
                 
             if op == "fft3d":
@@ -293,6 +295,8 @@ def eval_ast(node):
                 dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
             
                 final_suffix = []
+                print("oplist")
+                print(global_env.get("operatorskspace", []))
                 for item in global_env.get("operatorskspace", []):
                     if isinstance(item, OperatorSpec):
                         # compute exactly as before, based on spec.op and spec.params
