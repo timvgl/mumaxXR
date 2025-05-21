@@ -10,7 +10,11 @@ allowed_functions = {
     "float": float,
     "abs": abs,
     "max": max,
-    "min": min
+    "min": min,
+    "iceil": lambda x: int(np.ceil(x)),
+    "ifloor": lambda x: int(np.floor(x)),
+    "ceil": np.ceil,
+    "floor": np.floor
 }
 
 # Set of custom operator names that our language uses (and should not be treated as arithmetic calls)
