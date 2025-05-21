@@ -285,8 +285,10 @@ def eval_ast(node):
                 parent_name = eval_ast(node["args"][0])
                 return parent_name + "_k_x_y_z"
             if op == "fft4d":
-                parent_name = eval_ast(node["args"][0])
-                parent_mesh = mesh_sizes[parent_name]
+                parent = eval_ast(node["args"][0])
+                if parent not in mesh_sizes:
+                    init_mesh_for(parent)
+                parent_mesh = mesh_sizes[parent]
                 nx, ny, nz = parent_mesh
                 dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
             
@@ -330,7 +332,7 @@ def eval_ast(node):
                     else:
                         final_suffix.append(item)
             
-                return parent_name + "_k_x_y_z" + "".join(final_suffix) + "_f"
+                return parent + "_k_x_y_z" + "".join(final_suffix) + "_f"
             if op == "fft_t":
                 parent_name = eval_ast(node["args"][0])
                 return parent_name + "_f"
