@@ -402,6 +402,7 @@ def eval_ast(node):
                         # ignore empty, or plain suffix strings if you still use those
                         specs.append(v)
                 # store the list for FFT4D:
+                print(specs)
                 global_env["operatorskspace"] = specs
                 return ""  # mergeoperators itself yields no direct suffix here
             raise Exception(f"Unknown custom function: {op}")
