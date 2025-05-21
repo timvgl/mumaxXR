@@ -328,6 +328,18 @@ def process_command(cmd):
             global_env["ny"] = int(global_env["ty"] / global_env["dy"])
         if varname in ["tz", "dz"] and "tz" in global_env and "dz" in global_env:
             global_env["nz"] = int(global_env["tz"] / global_env["dz"])
+        if varname in ["nx", "dx"] and "nx" in global_env and "dx" in global_env:
+            global_env["tx"] = float(global_env["nx"]) * global_env["dx"]
+        if varname in ["ny", "dy"] and "ny" in global_env and "dy" in global_env:
+            global_env["ty"] = float(global_env["ny"]) * global_env["dy"]
+        if varname in ["nz", "dz"] and "nz" in global_env and "dz" in global_env:
+            global_env["tz"] = float(global_env["nz"]) * global_env["dz"]
+        if varname in ["tx", "nx"] and "tx" in global_env and "nx" in global_env:
+            global_env["dx"] = int(global_env["tx"] / global_env["nx"])
+        if varname in ["ty", "ny"] and "ty" in global_env and "ny" in global_env:
+            global_env["dy"] = int(global_env["ty"] / global_env["ny"])
+        if varname in ["tz", "nz"] and "tz" in global_env and "nz" in global_env:
+            global_env["dz"] = int(global_env["tz"] / global_env["nz"])
         return f"{varname} defined as {value}"
     else:
         ast = parse_expression(cmd)
