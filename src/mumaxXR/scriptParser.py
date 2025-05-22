@@ -413,6 +413,8 @@ def eval_ast(node):
                 x1 = eval_ast(node["args"][1])
                 x2 = eval_ast(node["args"][2])
                 new_name = parent_name + "_xrange" + range_str(x1, x2)
+                if not parent_name in mesh_sizes:
+                    init_mesh_for(parent_name)
                 update_mesh_after_crop(parent_name, new_name, x1, x2, 0, mesh_sizes[parent_name][1], 0, mesh_sizes[parent_name][2])
                 return new_name
             if op in ["cropy", "expandy"]:
