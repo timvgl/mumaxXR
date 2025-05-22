@@ -324,13 +324,27 @@ def eval_ast(node):
                 
             if op == "fft3d":
                 parent_name = eval_ast(node["args"][0])
-                return parent_name + "_k_x_y_z"
+                if not parent_name in mesh_sizes:
+                    init_mesh_for(parent_name)
+                new_name = parent_name + "_k_x_y_z"
+                parent_mesh = mesh_sizes[parent_name]
+                nx, ny, nz = parent_mesh
+                if global_env.get("negativekx", "true") == "true":
+                    nx += 2
+                else:
+                    nx += 1
+                update_mesh_after_expand(parent_name, new_name, 0, nx, 0, ny, 0, nz)
+                return new_name
             if op == "fft4d":
                 parent = eval_ast(node["args"][0])
                 if parent not in mesh_sizes:
                     init_mesh_for(parent)
                 parent_mesh = mesh_sizes[parent]
                 nx, ny, nz = parent_mesh
+                if global_env.get("negativekx", "true") == "true":
+                    nx += 2
+                else:
+                    nx += 1
                 dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
             
                 final_suffix = []
@@ -366,7 +380,7 @@ def eval_ast(node):
                             kx0, kx1 = spec.params
                             startX = 0
                             if global_env.get("negativekx", "true") == "true":
-                                startX = (float(nx)-1.0)/2
+                                startX = float(nx)/2
                             x1 = iceil(startX + kx0*float(nx)*dx)
                             x2 = None
                             if kx0 == kx1:
