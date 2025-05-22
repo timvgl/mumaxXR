@@ -412,6 +412,8 @@ def eval_ast(node):
                             if global_env.get("negativekx", "true") == "true":
                                 startX = float(nx)/2
                             x1 = iceil(startX + kx0*float(nx)*dx)
+                            print(startX + kx0*float(nx)*dx)
+                            print(x1)
                             x2 = None
                             if kx0 == kx1:
                                 x2 = x1 + 1
