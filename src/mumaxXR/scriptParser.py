@@ -346,7 +346,7 @@ def eval_ast(node):
                 parent_mesh = mesh_sizes[parent]
                 nx_real, ny, nz = parent_mesh
                 if global_env.get("negativekx", "true") == "true":
-                    nx = nx_real + 2
+                    nx = 2 * (nx_real // 2 + 1)
                 else:
                     nx = nx_real + 1
                 dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
