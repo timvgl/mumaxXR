@@ -495,6 +495,8 @@ def eval_ast(node):
             comp_index = eval_ast(node["args"][0])
             mapping = {0: "_x", 1: "_y", 2: "_z"}
             new_name = obj_name + mapping[comp_index]
+            if not obj_name in mesh_sizes:
+                init_mesh_for(obj_name)
             mesh_sizes[new_name] = mesh_sizes[obj_name]
             return new_name
         elif member in ["abs", "phi", "real", "imag"]:
