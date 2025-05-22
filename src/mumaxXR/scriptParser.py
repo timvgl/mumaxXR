@@ -494,7 +494,9 @@ def eval_ast(node):
                 raise Exception("comp expects exactly one argument")
             comp_index = eval_ast(node["args"][0])
             mapping = {0: "_x", 1: "_y", 2: "_z"}
-            return obj_name + mapping.get(comp_index, f"_comp{comp_index}")
+            new_name = obj_name + mapping[comp_index]
+            mesh_sizes[new_name] = mesh_sizes[obj_name]
+            return new_name
         elif member in ["abs", "phi", "real", "imag"]:
             if len(node["args"]) != 0:
                 raise Exception(f"Member function {member} expects no arguments")
