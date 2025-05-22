@@ -323,6 +323,7 @@ def eval_ast(node):
                     init_mesh_for(parent)
                 parent_mesh = mesh_sizes[parent]
                 nx, ny, nz = parent_mesh
+                print(nx, ny, nz)
                 dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
             
                 final_suffix = []
