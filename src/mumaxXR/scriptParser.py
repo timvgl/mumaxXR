@@ -386,6 +386,8 @@ def eval_ast(node):
                             if kx0 == kx1:
                                 x2 = x1 + 1
                             else:
+                                print(startX + kx1*float(nx)*dx)
+                                print(ifloor(startX + kx1*float(nx)*dx))
                                 x2 = ifloor(startX + kx1*float(nx)*dx)
                             final_suffix.append(f"_xrange{range_str(x1, x2)}")
                         if spec.op=="cropky":
