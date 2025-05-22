@@ -221,9 +221,7 @@ def eval_ast(node):
         if op in custom_ops:
             if op in ["cropk","cropkx","cropky","cropkz","cropkxy"]:
                 parent = eval_ast(node["args"][0])
-                # ensure we know its mesh
-                if parent not in mesh_sizes:
-                    init_mesh_for(parent)
+
                 nx, ny, nz = mesh_sizes[parent]
                 dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
                 # helper to compute ceil/floor indices
@@ -413,14 +411,17 @@ def eval_ast(node):
             if op in ["cropx", "expandx"]:
                 x1 = eval_ast(node["args"][1])
                 x2 = eval_ast(node["args"][2])
+                update_mesh_after_crop(parent_name, new_name, x1, x2, 0, mesh_sizes[parent_name][1], 0, mesh_sizes[parent_name][2])
                 return eval_ast(node["args"][0]) + "_xrange" + range_str(x1, x2)
             if op in ["cropy", "expandy"]:
                 y1 = eval_ast(node["args"][1])
                 y2 = eval_ast(node["args"][2])
+                update_mesh_after_crop(parent_name, new_name, 0, mesh_sizes[parent_name][0], y1, y2, 0, mesh_sizes[parent_name][2])
                 return eval_ast(node["args"][0]) + "_yrange" + range_str(y1, y2)
             if op in ["cropz", "expandz"]:
                 z1 = eval_ast(node["args"][1])
                 z2 = eval_ast(node["args"][2])
+                update_mesh_after_crop(parent_name, new_name, 0, mesh_sizes[parent_name][0], 0, mesh_sizes[parent_name][1], z1, z2)
                 return eval_ast(node["args"][0]) + "_zrange" + range_str(z1, z2)
             if op == "croplayer":
                 layer = eval_ast(node["args"][1])
