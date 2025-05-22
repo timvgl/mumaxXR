@@ -234,11 +234,23 @@ def eval_ast(node):
                     # mumax uses startIndexX = symmetricX? nx/2 : (NegativeKX? nx/2 : 0)
                     startX = nx/2
                     x1 = iceil(startX + kx0*nx*dx)
-                    x2 = ifloor(startX + kx1*nx*dx)
+                    x2 = None
+                    if kx0 == kx1:
+                        x2 = x1 + 1
+                    else:
+                        x2 = ifloor(startX + kx1*nx*dx)
                     y1 = iceil(ny/2 + ky0*ny*dy)
-                    y2 = ifloor(ny/2 + ky1*ny*dy)
+                    y2 = None
+                    if ky0 == ky1:
+                        y2 = y1 + 1
+                    else:
+                        y2 = ifloor(ny/2 + ky1*ny*dy)
                     z1 = iceil(nz/2 + kz0*nz*dz)
-                    z2 = ifloor(nz/2 + kz1*nz*dz)
+                    z2 = None
+                    if kz0 == kz1:
+                        z2 = z1 + 1
+                    else:
+                        z2 = ifloor(nz/2 + kz1*nz*dz)
                     name = f"{parent}_xrange{range_str(x1, x2)}yrange{range_str(y1, y2)}zrange{range_str(z1, z2)}"
                     update_mesh_after_crop(parent, name, x1,x2,y1,y2,z1,z2)
                     return name
@@ -247,7 +259,11 @@ def eval_ast(node):
                     kx0, kx1 = [eval_ast(a) for a in node["args"][1:3]]
                     startX = nx/2
                     x1 = iceil(startX + kx0*nx*dx)
-                    x2 = ifloor(startX + kx1*nx*dx)
+                    x2 = None
+                    if kx0 == kx1:
+                        x2 = x1 + 1
+                    else:
+                        x2 = ifloor(startX + kx1*nx*dx)
                     name = f"{parent}_xrange{range_str(x1, x2)}"
                     update_mesh_after_crop(parent, name, x1,x2, 0,ny, 0,nz)
                     return name
@@ -255,7 +271,11 @@ def eval_ast(node):
                 if op == "cropky":
                     ky0, ky1 = [eval_ast(a) for a in node["args"][1:3]]
                     y1 = iceil(ny/2 + ky0*ny*dy)
-                    y2 = ifloor(ny/2 + ky1*ny*dy)
+                    y2 = None
+                    if ky0 == ky1:
+                        y2 = y1 + 1
+                    else:
+                        y2 = ifloor(ny/2 + ky1*ny*dy)
                     name = f"{parent}_yrange{range_str(y1, y2)}"
                     update_mesh_after_crop(parent, name, 0,nx, y1,y2, 0,nz)
                     return name
@@ -263,7 +283,11 @@ def eval_ast(node):
                 if op == "cropkz":
                     kz0, kz1 = [eval_ast(a) for a in node["args"][1:3]]
                     z1 = iceil(nz/2 + kz0*nz*dz)
-                    z2 = ifloor(nz/2 + kz1*nz*dz)
+                    z2 = None
+                    if kz0 == kz1:
+                        z2 = z1 + 1
+                    else:
+                        z2 = ifloor(nz/2 + kz1*nz*dz)
                     name = f"{parent}_zrange{range_str(z1, z2)}"
                     update_mesh_after_crop(parent, name, 0,nx, 0,ny, z1,z2)
                     return name
@@ -272,16 +296,22 @@ def eval_ast(node):
                     kx0, kx1, ky0, ky1 = [eval_ast(a) for a in node["args"][1:5]]
                     startX = nx/2
                     x1 = iceil(startX + kx0*nx*dx)
-                    x2 = ifloor(startX + kx1*nx*dx)
+                    x2 = None
+                    if kx0 == kx1:
+                        x2 = x1 + 1
+                    else:
+                        x2 = ifloor(startX + kx1*nx*dx)
                     y1 = iceil(ny/2 + ky0*ny*dy)
-                    y2 = ifloor(ny/2 + ky1*ny*dy)
+                    y2 = None
+                    if ky0 == ky1:
+                        y2 = y1 + 1
+                    else:
+                        y2 = ifloor(ny/2 + ky1*ny*dy)
                     name = f"{parent}_xrange{range_str(x1, x2)}yrange{range_str(y1, y2)}"
                     update_mesh_after_crop(parent, name, x1,x2, y1,y2, 0,nz)
                     return name
             if op in ["cropkoperator","cropkxoperator","cropkyoperator","cropkzoperator","cropkxyoperator"]:
                 args = [eval_ast(a) for a in node["args"]]
-                print("opsssss")
-                print(op)
                 return OperatorSpec(op.replace("operator", ""), tuple(args))
                 
             if op == "fft3d":
@@ -296,8 +326,6 @@ def eval_ast(node):
                 dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
             
                 final_suffix = []
-                print("oplist")
-                print(global_env.get("operatorskspace", []))
                 for item in global_env.get("operatorskspace", []):
                     if isinstance(item, OperatorSpec):
                         # compute exactly as before, based on spec.op and spec.params
@@ -307,32 +335,72 @@ def eval_ast(node):
                             startX = 0
                             if global_env.get("negativekx", "true") == "true":
                                 startX = nx/2
-                            x1 = iceil(startX + kx0*nx*dx); x2 = ifloor(startX + kx1*nx*dx)
-                            y1 = iceil(ny/2 + ky0*ny*dy); y2 = ifloor(ny/2 + ky1*ny*dy)
-                            z1 = iceil(nz/2 + kz0*nz*dz); z2 = ifloor(nz/2 + kz1*nz*dz)
+                            x1 = iceil(startX + kx0*nx*dx)
+                            x2 = None
+                            if kx0 == kx1:
+                                x2 = x1 + 1
+                            else:
+                                x2 = ifloor(startX + kx1*nx*dx)
+                            y1 = iceil(ny/2 + ky0*ny*dy)
+                            y2 = None
+                            if ky0 == ky1:
+                                y2 = y1 + 1
+                            else:
+                                y2 = ifloor(ny/2 + ky1*ny*dy)
+                            z1 = iceil(nz/2 + kz0*nz*dz)
+                            z2 = None
+                            if kz0 == kz1:
+                                z2 = z1 + 1
+                            else:
+                                z2 = ifloor(nz/2 + kz1*nz*dz)
                             final_suffix.append(f"_xrange{range_str(x1, x2)}yrange{range_str(y1, y2)}")
                         if spec.op=="cropkx":
                             kx0, kx1 = spec.params
                             startX = 0
                             if global_env.get("negativekx", "true") == "true":
                                 startX = nx/2
-                            x1 = iceil(startX + kx0*nx*dx); x2 = ifloor(startX + kx1*nx*dx)
+                            x1 = iceil(startX + kx0*nx*dx)
+                            x2 = None
+                            if kx0 == kx1:
+                                x2 = x1 + 1
+                            else:
+                                x2 = ifloor(startX + kx1*nx*dx)
                             final_suffix.append(f"_xrange{range_str(x1, x2)}")
                         if spec.op=="cropky":
                             ky0, ky1 = spec.params
-                            y1 = iceil(ny/2 + ky0*ny*dy); y2 = ifloor(ny/2 + ky1*ny*dy)
+                            y1 = iceil(ny/2 + ky0*ny*dy)
+                            y2 = None
+                            if ky0 == ky1:
+                                y2 = y1 + 1
+                            else:
+                                y2 = ifloor(ny/2 + ky1*ny*dy)
                             final_suffix.append(f"_yrange{range_str(y1, y2)}")
                         if spec.op=="cropkz":
                             kz0, kz1 = spec.params
-                            z1 = iceil(nz/2 + kz0*nz*dz); z2 = ifloor(nz/2 + kz1*nz*dz)
+                            z1 = iceil(nz/2 + kz0*nz*dz)
+                            z2 = None
+                            if kz0 == kz1:
+                                z2 = z1 + 1
+                            else:
+                                z2 = ifloor(nz/2 + kz1*nz*dz)
                             final_suffix.append(f"_zrange{range_str(z1, z2)}")
                         if spec.op=="cropkxy":
                             kx0, kx1, ky0, ky1 = spec.params
                             startX = 0
                             if global_env.get("negativekx", "true") == "true":
                                 startX = nx/2
-                            x1 = iceil(startX + kx0*nx*dx); x2 = ifloor(startX + kx1*nx*dx)
-                            y1 = iceil(ny/2 + ky0*ny*dy); y2 = ifloor(ny/2 + ky1*ny*dy)
+                            x1 = iceil(startX + kx0*nx*dx)
+                            x2 = None
+                            if kx0 == kx1:
+                                x2 = x1 + 1
+                            else:
+                                x2 = ifloor(startX + kx1*nx*dx)
+                            y1 = iceil(ny/2 + ky0*ny*dy)
+                            y2 = None
+                            if ky0 == ky1:
+                                y2 = y1 + 1
+                            else:
+                                y2 = ifloor(ny/2 + ky1*ny*dy)
                             final_suffix.append(f"_xrange{range_str(x1, x2)}yrange{range_str(y1, y2)}")
                     else:
                         final_suffix.append(item)
