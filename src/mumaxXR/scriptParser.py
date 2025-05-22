@@ -282,7 +282,7 @@ def eval_ast(node):
                 args = [eval_ast(a) for a in node["args"]]
                 print("opsssss")
                 print(op)
-                return OperatorSpec(op=op.replace("operator", ""), params=tuple(args))
+                return OperatorSpec(op.replace("operator", ""), tuple(args))
                 
             if op == "fft3d":
                 parent_name = eval_ast(node["args"][0])
