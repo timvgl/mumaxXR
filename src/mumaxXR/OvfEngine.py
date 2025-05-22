@@ -902,12 +902,14 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                 defaultChunks['k_y'] = backend_array.coords[-3].size
                 defaultChunks['k_x'] = backend_array.coords[-2].size
                 defaultChunks['comp'] = backend_array.coords[-1].size
-                
+                del defaultChunks['x']
+                del defaultChunks['y']
+                del defaultChunks['z']
 
             if (backend_array_sc.shape != ()):
                 defaultChunksSc = {}
                 if backend_array_sc.mesh.tmax is None and backend_array_sc.mesh.freq is not None:
-                    defaultChunks['f'] = 1
+                    defaultChunksSc['f'] = 1
                     notOneDims.append('f')
                 for dim in backend_array_sc.dims:
                     if (dim not in notOneDims):
@@ -915,6 +917,9 @@ class OvfEngine(xr.backends.BackendEntrypoint):
                 defaultChunksSc['k_z'] = backend_array_sc.coords[-3].size
                 defaultChunksSc['k_y'] = backend_array_sc.coords[-2].size
                 defaultChunksSc['k_x'] = backend_array_sc.coords[-1].size
+                del defaultChunksSc['x']
+                del defaultChunksSc['y']
+                del defaultChunksSc['z']
             replaceDims = ['x', 'y', 'z']
             if (backend_array.shape != ()):
                 for i in range(len(backend_array.dims)):
@@ -937,7 +942,7 @@ class OvfEngine(xr.backends.BackendEntrypoint):
             if (backend_array_sc.shape != () and backend_array.shape != ()):
                 dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims + ['wavetypeSc'], backend_array.coords + [backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])))
             elif (backend_array_sc.shape != () and backend_array.shape == ()):
-                dataset = xr.Dataset({'rawSc': varSc}, coords=dict(zip(backend_array_sc.dims, backend_array_sc.coords)))
+                dataset = xr.Dataset({'raw': varSc}, coords=dict(zip([dim if dim.lower() != 'wavetypesc' else 'wavetype' for dim in backend_array_sc.dims], backend_array_sc.coords)))
             elif (backend_array_sc.shape == () and backend_array.shape != ()):
                 dataset = xr.Dataset({'raw': var}, coords=dict(zip(backend_array.dims, backend_array.coords)))
         else:
@@ -983,7 +988,7 @@ class OvfEngine(xr.backends.BackendEntrypoint):
             if (backend_array_sc.shape != () and backend_array.shape != ()):
                 dataset = xr.Dataset({'raw': var, 'rawSc': varSc}, coords=dict(zip(backend_array.dims + ['wavetypeSc'], backend_array.coords + [backend_array_sc.coords[backend_array_sc.dims.index('wavetypeSc')]])))
             elif (backend_array_sc.shape != () and backend_array.shape == ()):
-                dataset = xr.Dataset({'rawSc': varSc}, coords=dict(zip(backend_array_sc.dims, backend_array_sc.coords)))
+                dataset = xr.Dataset({'raw': varSc}, coords=dict(zip([dim if dim.lower() != 'wavetypesc' else 'wavetype' for dim in backend_array_sc.dims], backend_array_sc.coords)))
             elif (backend_array_sc.shape == () and backend_array.shape != ()):
                 dataset = xr.Dataset({'raw': var}, coords=dict(zip(backend_array.dims, backend_array.coords)))
         dataset.attrs["cellsize"] = backend_array.mesh.cellsize
