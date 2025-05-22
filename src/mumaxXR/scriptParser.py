@@ -250,6 +250,8 @@ def eval_ast(node):
                     else:
                         z2 = ifloor(nz/2 + kz1*nz*dz)
                     name = f"{parent}_xrange{range_str(x1, x2)}yrange{range_str(y1, y2)}zrange{range_str(z1, z2)}"
+                    if not parent in mesh_sizes:
+                        init_mesh_for(parent)
                     update_mesh_after_crop(parent, name, x1,x2,y1,y2,z1,z2)
                     return name
     
@@ -263,6 +265,8 @@ def eval_ast(node):
                     else:
                         x2 = ifloor(startX + kx1*nx*dx)
                     name = f"{parent}_xrange{range_str(x1, x2)}"
+                    if not parent in mesh_sizes:
+                        init_mesh_for(parent)
                     update_mesh_after_crop(parent, name, x1,x2, 0,ny, 0,nz)
                     return name
     
@@ -275,6 +279,8 @@ def eval_ast(node):
                     else:
                         y2 = ifloor(ny/2 + ky1*ny*dy)
                     name = f"{parent}_yrange{range_str(y1, y2)}"
+                    if not parent in mesh_sizes:
+                        init_mesh_for(parent)
                     update_mesh_after_crop(parent, name, 0,nx, y1,y2, 0,nz)
                     return name
     
@@ -287,6 +293,8 @@ def eval_ast(node):
                     else:
                         z2 = ifloor(nz/2 + kz1*nz*dz)
                     name = f"{parent}_zrange{range_str(z1, z2)}"
+                    if not parent in mesh_sizes:
+                        init_mesh_for(parent)
                     update_mesh_after_crop(parent, name, 0,nx, 0,ny, z1,z2)
                     return name
     
@@ -305,6 +313,8 @@ def eval_ast(node):
                         y2 = y1 + 1
                     else:
                         y2 = ifloor(ny/2 + ky1*ny*dy)
+                    if not parent in mesh_sizes:
+                        init_mesh_for(parent)
                     name = f"{parent}_xrange{range_str(x1, x2)}yrange{range_str(y1, y2)}"
                     update_mesh_after_crop(parent, name, x1,x2, y1,y2, 0,nz)
                     return name
@@ -418,29 +428,41 @@ def eval_ast(node):
                 update_mesh_after_crop(parent_name, new_name, x1, x2, 0, mesh_sizes[parent_name][1], 0, mesh_sizes[parent_name][2])
                 return new_name
             if op in ["cropy", "expandy"]:
+                parent_name = eval_ast(node["args"][0])
                 y1 = eval_ast(node["args"][1])
                 y2 = eval_ast(node["args"][2])
+                new_name = parent_name + "_yrange" + range_str(y1, y2)
+                if not parent_name in mesh_sizes:
+                    init_mesh_for(parent_name)
                 update_mesh_after_crop(parent_name, new_name, 0, mesh_sizes[parent_name][0], y1, y2, 0, mesh_sizes[parent_name][2])
-                return eval_ast(node["args"][0]) + "_yrange" + range_str(y1, y2)
+                return new_name
             if op in ["cropz", "expandz"]:
+                parent_name = eval_ast(node["args"][0])
                 z1 = eval_ast(node["args"][1])
                 z2 = eval_ast(node["args"][2])
+                new_name = parent_name + "_zrange" + range_str(z1, z2)
+                if not parent_name in mesh_sizes:
+                    init_mesh_for(parent_name)
                 update_mesh_after_crop(parent_name, new_name, 0, mesh_sizes[parent_name][0], 0, mesh_sizes[parent_name][1], z1, z2)
-                return eval_ast(node["args"][0]) + "_zrange" + range_str(z1, z2)
+                return new_name
             if op == "croplayer":
                 layer = eval_ast(node["args"][1])
                 return eval_ast(node["args"][0]) + "_zrange" + range_str(layer, layer + 1)
             if op in ["crop", "expand"]:
                 if len(node["args"]) < 7:
                     raise Exception(f"Not enough arguments for {op}")
+                parent_name = eval_ast(node["args"][0])
                 x1 = eval_ast(node["args"][1])
                 x2 = eval_ast(node["args"][2])
                 y1 = eval_ast(node["args"][3])
                 y2 = eval_ast(node["args"][4])
                 z1 = eval_ast(node["args"][5])
                 z2 = eval_ast(node["args"][6])
-                suffix = "_xrange" + range_str(x1, x2) + "yrange" + range_str(y1, y2) + "zrange" + range_str(z1, z2)
-                return eval_ast(node["args"][0]) + suffix
+                new_name = parent_name + "_xrange" + range_str(x1, x2) + "yrange" + range_str(y1, y2) + "zrange" + range_str(z1, z2)
+                if not parent_name in mesh_sizes:
+                    init_mesh_for(parent_name)
+                update_mesh_after_crop(parent_name, new_name, x1, x2, y1, y2, z1, z2)
+                return new_name
             if op in ["cropoperator", "expandoperator"]:
                 if len(node["args"]) < 6:
                     raise Exception(f"Not enough arguments for {op}")
@@ -477,7 +499,6 @@ def eval_ast(node):
                         # ignore empty, or plain suffix strings if you still use those
                         specs.append(v)
                 # store the list for FFT4D:
-                print(specs)
                 global_env["operatorskspace"] = specs
                 return specs  # mergeoperators itself yields no direct suffix here
             raise Exception(f"Unknown custom function: {op}")
