@@ -334,7 +334,7 @@ def eval_ast(node):
                 parent_mesh = mesh_sizes[parent_name]
                 nx_real, ny, nz = parent_mesh
                 if global_env.get("negativekx", "true") == "true":
-                    nx = nx_real + 2
+                    nx = 2 * (nx_real // 2 + 1)
                 else:
                     nx = nx_real + 1
                 update_mesh_after_expand(parent_name, new_name, 0, nx, 0, ny, 0, nz)
@@ -416,14 +416,10 @@ def eval_ast(node):
                             if global_env.get("negativekx", "true") == "true":
                                 startX = float(nx)/2
                             x1 = iceil(startX + kx0*float(nx_real)*dx)
-                            print(startX + kx0*float(nx_real)*dx)
-                            print(x1)
                             x2 = None
                             if kx0 == kx1:
                                 x2 = x1 + 1
                             else:
-                                print(startX + kx1*float(nx_real)*dx)
-                                print(ifloor(startX + kx1*float(nx_real)*dx))
                                 x2 = ifloor(startX + kx1*float(nx_real)*dx)
                             y1 = iceil(float(ny)/2 + ky0*float(ny)*dy)
                             y2 = None
