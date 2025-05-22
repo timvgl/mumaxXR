@@ -223,6 +223,10 @@ def eval_ast(node):
                 parent = eval_ast(node["args"][0])
 
                 nx, ny, nz = mesh_sizes[parent]
+                if global_env.get("negativekx", "true") == "true":
+                    nx_real = nx - 2
+                else:
+                    nx_real = nx - 1
                 dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
                 # helper to compute ceil/floor indices
                 symmetricX = global_env.get("negativekx", "true") == "true"
@@ -231,12 +235,12 @@ def eval_ast(node):
                     kx0, kx1, ky0, ky1, kz0, kz1 = [eval_ast(a) for a in node["args"][1:7]]
                     # mumax uses startIndexX = symmetricX? nx/2 : (NegativeKX? nx/2 : 0)
                     startX = float(nx/2)
-                    x1 = iceil(startX + kx0*float(nx)*dx)
+                    x1 = iceil(startX + kx0*float(nx_real)*dx)
                     x2 = None
                     if kx0 == kx1:
                         x2 = x1 + 1
                     else:
-                        x2 = ifloor(startX + kx1*float(nx)*dx)
+                        x2 = ifloor(startX + kx1*float(nx_real)*dx)
                     y1 = iceil(float(ny)/2 + ky0*float(ny)*dy)
                     y2 = None
                     if ky0 == ky1:
@@ -258,12 +262,12 @@ def eval_ast(node):
                 if op == "cropkx":
                     kx0, kx1 = [eval_ast(a) for a in node["args"][1:3]]
                     startX = float(nx/2)
-                    x1 = iceil(startX + kx0*float(nx)*dx)
+                    x1 = iceil(startX + kx0*float(nx_real)*dx)
                     x2 = None
                     if kx0 == kx1:
                         x2 = x1 + 1
                     else:
-                        x2 = ifloor(startX + kx1*float(nx)*dx)
+                        x2 = ifloor(startX + kx1*float(nx_real)*dx)
                     name = f"{parent}_xrange{range_str(x1, x2)}"
                     if not parent in mesh_sizes:
                         init_mesh_for(parent)
@@ -301,12 +305,12 @@ def eval_ast(node):
                 if op == "cropkxy":
                     kx0, kx1, ky0, ky1 = [eval_ast(a) for a in node["args"][1:5]]
                     startX = float(nx)/2
-                    x1 = iceil(startX + kx0*float(nx)*dx)
+                    x1 = iceil(startX + kx0*float(nx_real)*dx)
                     x2 = None
                     if kx0 == kx1:
                         x2 = x1 + 1
                     else:
-                        x2 = ifloor(startX + kx1*float(nx)*dx)
+                        x2 = ifloor(startX + kx1*float(nx_real)*dx)
                     y1 = iceil(float(ny)/2 + ky0*float(ny)*dy)
                     y2 = None
                     if ky0 == ky1:
@@ -328,11 +332,11 @@ def eval_ast(node):
                     init_mesh_for(parent_name)
                 new_name = parent_name + "_k_x_y_z"
                 parent_mesh = mesh_sizes[parent_name]
-                nx, ny, nz = parent_mesh
+                nx_real, ny, nz = parent_mesh
                 if global_env.get("negativekx", "true") == "true":
-                    nx += 2
+                    nx = nx_real + 2
                 else:
-                    nx += 1
+                    nx = nx_real + 1
                 update_mesh_after_expand(parent_name, new_name, 0, nx, 0, ny, 0, nz)
                 return new_name
             if op == "fft4d":
@@ -340,11 +344,11 @@ def eval_ast(node):
                 if parent not in mesh_sizes:
                     init_mesh_for(parent)
                 parent_mesh = mesh_sizes[parent]
-                nx, ny, nz = parent_mesh
+                nx_real, ny, nz = parent_mesh
                 if global_env.get("negativekx", "true") == "true":
-                    nx += 2
+                    nx = nx_real + 2
                 else:
-                    nx += 1
+                    nx = nx_real + 1
                 dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
             
                 final_suffix = []
@@ -357,12 +361,12 @@ def eval_ast(node):
                             startX = 0
                             if global_env.get("negativekx", "true") == "true":
                                 startX = float(nx)/2
-                            x1 = iceil(startX + kx0*float(nx)*dx)
+                            x1 = iceil(startX + kx0*float(nx_real)*dx)
                             x2 = None
                             if kx0 == kx1:
                                 x2 = x1 + 1
                             else:
-                                x2 = ifloor(startX + kx1*float(nx)*dx)
+                                x2 = ifloor(startX + kx1*float(nx_real)*dx)
                             y1 = iceil(float(ny)/2 + ky0*float(ny)*dy)
                             y2 = None
                             if ky0 == ky1:
@@ -381,12 +385,12 @@ def eval_ast(node):
                             startX = 0
                             if global_env.get("negativekx", "true") == "true":
                                 startX = float(nx)/2
-                            x1 = iceil(startX + kx0*float(nx)*dx)
+                            x1 = iceil(startX + kx0*float(nx_real)*dx)
                             x2 = None
                             if kx0 == kx1:
                                 x2 = x1 + 1
                             else:
-                                x2 = ifloor(startX + kx1*float(nx)*dx)
+                                x2 = ifloor(startX + kx1*float(nx_real)*dx)
                             final_suffix.append(f"_xrange{range_str(x1, x2)}")
                         if spec.op=="cropky":
                             ky0, ky1 = spec.params
@@ -411,16 +415,16 @@ def eval_ast(node):
                             startX = 0
                             if global_env.get("negativekx", "true") == "true":
                                 startX = float(nx)/2
-                            x1 = iceil(startX + kx0*float(nx)*dx)
-                            print(startX + kx0*float(nx)*dx)
+                            x1 = iceil(startX + kx0*float(nx_real)*dx)
+                            print(startX + kx0*float(nx_real)*dx)
                             print(x1)
                             x2 = None
                             if kx0 == kx1:
                                 x2 = x1 + 1
                             else:
-                                print(startX + kx1*float(nx)*dx)
-                                print(ifloor(startX + kx1*float(nx)*dx))
-                                x2 = ifloor(startX + kx1*float(nx)*dx)
+                                print(startX + kx1*float(nx_real)*dx)
+                                print(ifloor(startX + kx1*float(nx_real)*dx))
+                                x2 = ifloor(startX + kx1*float(nx_real)*dx)
                             y1 = iceil(float(ny)/2 + ky0*float(ny)*dy)
                             y2 = None
                             if ky0 == ky1:
