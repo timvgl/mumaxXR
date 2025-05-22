@@ -465,6 +465,8 @@ def process_command(cmd):
         expr_str = expr_str.strip()
         ast = parse_expression(expr_str)
         value = eval_ast(ast)
+        print(varname)
+        print(value)
         global_env[varname] = value
         if varname in ["tx", "dx"] and "tx" in global_env and "dx" in global_env:
             global_env["nx"] = int(global_env["tx"] / global_env["dx"])
