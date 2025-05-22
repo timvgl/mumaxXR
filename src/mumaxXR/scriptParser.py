@@ -258,12 +258,12 @@ def eval_ast(node):
                 if op == "cropkx":
                     kx0, kx1 = [eval_ast(a) for a in node["args"][1:3]]
                     startX = nx/2
-                    x1 = iceil(startX + kx0*nx*dx)
+                    x1 = iceil(startX + kx0*float(nx)*dx)
                     x2 = None
                     if kx0 == kx1:
                         x2 = x1 + 1
                     else:
-                        x2 = ifloor(startX + kx1*nx*dx)
+                        x2 = ifloor(startX + kx1*float(nx)*dx)
                     name = f"{parent}_xrange{range_str(x1, x2)}"
                     if not parent in mesh_sizes:
                         init_mesh_for(parent)
@@ -565,8 +565,6 @@ def process_command(cmd):
         expr_str = expr_str.strip()
         ast = parse_expression(expr_str)
         value = eval_ast(ast)
-        print(varname)
-        print(value)
         global_env[varname] = value
         if varname in ["tx", "dx"] and "tx" in global_env and "dx" in global_env:
             global_env["nx"] = int(global_env["tx"] / global_env["dx"])
