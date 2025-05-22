@@ -404,7 +404,7 @@ def eval_ast(node):
                 # store the list for FFT4D:
                 print(specs)
                 global_env["operatorskspace"] = specs
-                return ""  # mergeoperators itself yields no direct suffix here
+                return specs  # mergeoperators itself yields no direct suffix here
             raise Exception(f"Unknown custom function: {op}")
         else:
             evaluated_args = [eval_ast(arg) for arg in node["args"]]
