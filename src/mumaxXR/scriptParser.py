@@ -31,8 +31,9 @@ constants = {
 
 class OperatorSpec:
     """Hold the type (e.g. 'cropkxy') and its float parameters."""
-    op: str
-    params: tuple
+    def __init__(op: str, params: tuple):
+        self.op = op
+        self.params = params
 
 mesh_sizes = {}
 
