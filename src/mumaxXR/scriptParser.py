@@ -37,14 +37,54 @@ class OperatorSpec:
 
 mesh_sizes = {}
 
+# Simulation mesh as set by SetGridSize/SetCellSize/SetMesh (keys nx, ny, nz, dx, dy, dz).
+# Takes precedence over user variables that merely happen to be called nx, dx, ...
+mesh = {}
+
+def mesh_param(key):
+    return mesh.get(key, global_env.get(key))
+
+def set_mesh(op, args):
+    if op in ["setgridsize", "setmesh"]:
+        mesh["nx"], mesh["ny"], mesh["nz"] = [int(round(a)) for a in args[0:3]]
+    if op == "setcellsize":
+        mesh["dx"], mesh["dy"], mesh["dz"] = [float(a) for a in args[0:3]]
+    if op == "setmesh":
+        mesh["dx"], mesh["dy"], mesh["dz"] = [float(a) for a in args[3:6]]
+
+def get_cellsize():
+    cellsize = [mesh_param("dx"), mesh_param("dy"), mesh_param("dz")]
+    if None in cellsize:
+        raise Exception("Cell size unknown: no SetCellSize/SetMesh (or dx, dy, dz variables) parsed before it is used")
+    return cellsize
+
 def iceil(x): return int(np.ceil(x))
 def ifloor(x): return int(np.floor(x))
 
 def init_mesh_for(name):
-    # whenever a base quantity like "m" is first seen, we assume a full mesh:
-    # it must have been defined by Tx,dx etc → we already put nx,ny,nz in global_env
-    if "nx" in global_env and "ny" in global_env and "nz" in global_env:
-        mesh_sizes[name] = [global_env["nx"], global_env["ny"], global_env["nz"]]
+    # whenever a base quantity like "m" is first seen, we assume a full mesh
+    sizes = [mesh_param("nx"), mesh_param("ny"), mesh_param("nz")]
+    if None not in sizes:
+        mesh_sizes[name] = sizes
+
+def find_mesh(name):
+    # mesh of a quantity, or None if it cannot be determined (yet)
+    if name not in mesh_sizes:
+        init_mesh_for(name)
+    return mesh_sizes.get(name)
+
+def get_mesh(name):
+    # like find_mesh, for operations whose output name depends on the mesh
+    sizes = find_mesh(name)
+    if sizes is None:
+        raise Exception(f"Mesh of '{name}' unknown: no SetGridSize/SetMesh (or nx, ny, nz variables) parsed before it is used")
+    return sizes
+
+def inherit_mesh(parent_name, new_name):
+    # derived quantities (components, abs, phase, ...) live on their parent's mesh, if that is known
+    parent_mesh = find_mesh(parent_name)
+    if parent_mesh is not None:
+        mesh_sizes[new_name] = parent_mesh
 
 # Call this right after you see an assignment to Tx,Ty,Tz,dx,dy,dz:
 #    init_mesh_for("m")    # or whatever your base quantity is called
@@ -64,7 +104,7 @@ def range_str(a, b):
 # arithmetic operators, and punctuation (including dot, comma, parentheses, equal sign, and colon).
 def tokenize(s):
     # The regex now will match numbers, identifiers, and the operators.
-    tokens = re.findall(r'\d+(?:\.\d+)?(?:e-?\d+)?|[a-z_]\w*|[:=+\-*/(),.]', s)
+    tokens = re.findall(r'(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?|[a-z_]\w*|[:=+\-*/(),.]', s)
     return tokens
 
 # Recursive descent parser that handles both arithmetic and our custom function/member calls.
@@ -222,12 +262,12 @@ def eval_ast(node):
             if op in ["cropk","cropkx","cropky","cropkz","cropkxy"]:
                 parent = eval_ast(node["args"][0])
 
-                nx, ny, nz = mesh_sizes[parent]
+                nx, ny, nz = get_mesh(parent)
                 if global_env.get("negativekx", "true") == "true":
                     nx_real = nx - 2
                 else:
                     nx_real = nx - 1
-                dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
+                dx, dy, dz = get_cellsize()
                 # helper to compute ceil/floor indices
                 symmetricX = global_env.get("negativekx", "true") == "true"
                 # now dispatch
@@ -254,8 +294,6 @@ def eval_ast(node):
                     else:
                         z2 = ifloor(float(nz)/2 + kz1*float(nz)*dz)
                     name = f"{parent}_xrange{range_str(x1, x2)}yrange{range_str(y1, y2)}zrange{range_str(z1, z2)}"
-                    if not parent in mesh_sizes:
-                        init_mesh_for(parent)
                     update_mesh_after_crop(parent, name, x1,x2,y1,y2,z1,z2)
                     return name
     
@@ -269,8 +307,6 @@ def eval_ast(node):
                     else:
                         x2 = ifloor(startX + kx1*float(nx_real)*dx)
                     name = f"{parent}_xrange{range_str(x1, x2)}"
-                    if not parent in mesh_sizes:
-                        init_mesh_for(parent)
                     update_mesh_after_crop(parent, name, x1,x2, 0,ny, 0,nz)
                     return name
     
@@ -283,8 +319,6 @@ def eval_ast(node):
                     else:
                         y2 = ifloor(float(ny)/2 + ky1*float(ny)*dy)
                     name = f"{parent}_yrange{range_str(y1, y2)}"
-                    if not parent in mesh_sizes:
-                        init_mesh_for(parent)
                     update_mesh_after_crop(parent, name, 0, nx, y1,y2, 0,nz)
                     return name
     
@@ -297,8 +331,6 @@ def eval_ast(node):
                     else:
                         z2 = ifloor(float(nz)/2 + kz1*float(nz)*dz)
                     name = f"{parent}_zrange{range_str(z1, z2)}"
-                    if not parent in mesh_sizes:
-                        init_mesh_for(parent)
                     update_mesh_after_crop(parent, name, 0,nx, 0,ny, z1,z2)
                     return name
     
@@ -317,8 +349,6 @@ def eval_ast(node):
                         y2 = y1 + 1
                     else:
                         y2 = ifloor(float(ny)/2 + ky1*float(ny)*dy)
-                    if not parent in mesh_sizes:
-                        init_mesh_for(parent)
                     name = f"{parent}_xrange{range_str(x1, x2)}yrange{range_str(y1, y2)}"
                     update_mesh_after_crop(parent, name, x1,x2, y1,y2, 0,nz)
                     return name
@@ -328,28 +358,25 @@ def eval_ast(node):
                 
             if op == "fft3d":
                 parent_name = eval_ast(node["args"][0])
-                if not parent_name in mesh_sizes:
-                    init_mesh_for(parent_name)
                 new_name = parent_name + "_k_x_y_z"
-                parent_mesh = mesh_sizes[parent_name]
-                nx_real, ny, nz = parent_mesh
-                if global_env.get("negativekx", "true") == "true":
-                    nx = 2 * (nx_real // 2 + 1)
-                else:
-                    nx = nx_real + 1
-                update_mesh_after_expand(parent_name, new_name, 0, nx, 0, ny, 0, nz)
+                parent_mesh = find_mesh(parent_name)
+                if parent_mesh is not None:
+                    nx_real, ny, nz = parent_mesh
+                    if global_env.get("negativekx", "true") == "true":
+                        nx = 2 * (nx_real // 2 + 1)
+                    else:
+                        nx = nx_real + 1
+                    update_mesh_after_expand(parent_name, new_name, 0, nx, 0, ny, 0, nz)
                 return new_name
             if op == "fft4d":
                 parent = eval_ast(node["args"][0])
-                if parent not in mesh_sizes:
-                    init_mesh_for(parent)
-                parent_mesh = mesh_sizes[parent]
+                parent_mesh = get_mesh(parent)
                 nx_real, ny, nz = parent_mesh
                 if global_env.get("negativekx", "true") == "true":
                     nx = 2 * (nx_real // 2 + 1)
                 else:
                     nx = nx_real + 1
-                dx, dy, dz = global_env["dx"], global_env["dy"], global_env["dz"]
+                dx, dy, dz = get_cellsize()
             
                 final_suffix = []
                 for item in global_env.get("operatorskspace", []):
@@ -440,27 +467,27 @@ def eval_ast(node):
                 x1 = eval_ast(node["args"][1])
                 x2 = eval_ast(node["args"][2])
                 new_name = parent_name + "_xrange" + range_str(x1, x2)
-                if not parent_name in mesh_sizes:
-                    init_mesh_for(parent_name)
-                update_mesh_after_crop(parent_name, new_name, x1, x2, 0, mesh_sizes[parent_name][1], 0, mesh_sizes[parent_name][2])
+                parent_mesh = find_mesh(parent_name)
+                if parent_mesh is not None:
+                    update_mesh_after_crop(parent_name, new_name, x1, x2, 0, parent_mesh[1], 0, parent_mesh[2])
                 return new_name
             if op in ["cropy", "expandy"]:
                 parent_name = eval_ast(node["args"][0])
                 y1 = eval_ast(node["args"][1])
                 y2 = eval_ast(node["args"][2])
                 new_name = parent_name + "_yrange" + range_str(y1, y2)
-                if not parent_name in mesh_sizes:
-                    init_mesh_for(parent_name)
-                update_mesh_after_crop(parent_name, new_name, 0, mesh_sizes[parent_name][0], y1, y2, 0, mesh_sizes[parent_name][2])
+                parent_mesh = find_mesh(parent_name)
+                if parent_mesh is not None:
+                    update_mesh_after_crop(parent_name, new_name, 0, parent_mesh[0], y1, y2, 0, parent_mesh[2])
                 return new_name
             if op in ["cropz", "expandz"]:
                 parent_name = eval_ast(node["args"][0])
                 z1 = eval_ast(node["args"][1])
                 z2 = eval_ast(node["args"][2])
                 new_name = parent_name + "_zrange" + range_str(z1, z2)
-                if not parent_name in mesh_sizes:
-                    init_mesh_for(parent_name)
-                update_mesh_after_crop(parent_name, new_name, 0, mesh_sizes[parent_name][0], 0, mesh_sizes[parent_name][1], z1, z2)
+                parent_mesh = find_mesh(parent_name)
+                if parent_mesh is not None:
+                    update_mesh_after_crop(parent_name, new_name, 0, parent_mesh[0], 0, parent_mesh[1], z1, z2)
                 return new_name
             if op == "croplayer":
                 layer = eval_ast(node["args"][1])
@@ -489,7 +516,8 @@ def eval_ast(node):
                 y2 = eval_ast(node["args"][3])
                 z1 = eval_ast(node["args"][4])
                 z2 = eval_ast(node["args"][5])
-                if "nz" in global_env and global_env["nz"] > 1 or "tz" in global_env and "dz" in global_env and int(global_env["tz"]/global_env["dz"]) > 1:
+                nz = mesh_param("nz")
+                if nz is not None and nz > 1:
                     suffix = "_xrange" + range_str(x1, x2) + "yrange" + range_str(y1, y2) + "zrange" + range_str(z1, z2)
                 else:
                     suffix = "_xrange" + range_str(x1, x2) + "yrange" + range_str(y1, y2)
@@ -521,6 +549,9 @@ def eval_ast(node):
             raise Exception(f"Unknown custom function: {op}")
         else:
             evaluated_args = [eval_ast(arg) for arg in node["args"]]
+            if op in ["setgridsize", "setcellsize", "setmesh"]:
+                set_mesh(op, evaluated_args)
+                return f"mesh set to {mesh}"
             if op in allowed_functions:
                 return allowed_functions[op](*evaluated_args)
             else:
@@ -535,19 +566,21 @@ def eval_ast(node):
             comp_index = eval_ast(node["args"][0])
             mapping = {0: "_x", 1: "_y", 2: "_z"}
             new_name = obj_name + mapping[comp_index]
-            if not obj_name in mesh_sizes:
-                init_mesh_for(obj_name)
-            mesh_sizes[new_name] = mesh_sizes[obj_name]
+            inherit_mesh(obj_name, new_name)
             return new_name
         elif member in ["abs", "phi", "real", "imag"]:
             if len(node["args"]) != 0:
                 raise Exception(f"Member function {member} expects no arguments")
-            return obj_name + "_" + member
+            new_name = obj_name + "_" + member
+            inherit_mesh(obj_name, new_name)
+            return new_name
         elif member in ["saveabs", "savephi", "topolar"]:
             if len(node["args"]) != 0:
                 raise Exception(f"Member function {member} expects no arguments")
             mapping = {"saveabs": "abs", "savephi": "phi", "topolar": "polar"}
-            return obj_name + "_" + mapping[member]
+            new_name = obj_name + "_" + mapping[member]
+            inherit_mesh(obj_name, new_name)
+            return new_name
         else:
             raise Exception(f"Unknown member function: {member}")
 
@@ -559,7 +592,9 @@ def eval_ast(node):
 # Process a command string.
 # If the command contains an assignment using either "=" or ":=", the variable is stored in global_env.
 def process_command(cmd):
-    cmd = cmd.strip()
+    # mumax identifiers are case-insensitive; trailing // comments would otherwise be
+    # tokenized as divisions and make the whole line fail to parse
+    cmd = cmd.split("//", 1)[0].strip().lower()
     # Check for ":=" assignment first.
     if ":=" in cmd:
         varname, expr_str = cmd.split(":=", 1)
@@ -569,11 +604,11 @@ def process_command(cmd):
         value = eval_ast(ast)
         global_env[varname] = value
         if varname in ["tx", "dx"] and "tx" in global_env and "dx" in global_env:
-            global_env["nx"] = int(global_env["tx"] / global_env["dx"])
+            global_env["nx"] = int(round(global_env["tx"] / global_env["dx"]))
         if varname in ["ty", "dy"] and "ty" in global_env and "dy" in global_env:
-            global_env["ny"] = int(global_env["ty"] / global_env["dy"])
+            global_env["ny"] = int(round(global_env["ty"] / global_env["dy"]))
         if varname in ["tz", "dz"] and "tz" in global_env and "dz" in global_env:
-            global_env["nz"] = int(global_env["tz"] / global_env["dz"])
+            global_env["nz"] = int(round(global_env["tz"] / global_env["dz"]))
         return f"{varname} defined as {value}"
     elif "=" in cmd:
         # Otherwise, use "=" assignment.
@@ -584,11 +619,11 @@ def process_command(cmd):
         value = eval_ast(ast)
         global_env[varname] = value
         if varname in ["tx", "dx"] and "tx" in global_env and "dx" in global_env:
-            global_env["nx"] = int(global_env["tx"] / global_env["dx"])
+            global_env["nx"] = int(round(global_env["tx"] / global_env["dx"]))
         if varname in ["ty", "dy"] and "ty" in global_env and "dy" in global_env:
-            global_env["ny"] = int(global_env["ty"] / global_env["dy"])
+            global_env["ny"] = int(round(global_env["ty"] / global_env["dy"]))
         if varname in ["tz", "dz"] and "tz" in global_env and "dz" in global_env:
-            global_env["nz"] = int(global_env["tz"] / global_env["dz"])
+            global_env["nz"] = int(round(global_env["tz"] / global_env["dz"]))
         if varname in ["nx", "dx"] and "nx" in global_env and "dx" in global_env:
             global_env["tx"] = float(global_env["nx"]) * global_env["dx"]
         if varname in ["ny", "dy"] and "ny" in global_env and "dy" in global_env:
@@ -596,11 +631,11 @@ def process_command(cmd):
         if varname in ["nz", "dz"] and "nz" in global_env and "dz" in global_env:
             global_env["tz"] = float(global_env["nz"]) * global_env["dz"]
         if varname in ["tx", "nx"] and "tx" in global_env and "nx" in global_env:
-            global_env["dx"] = int(global_env["tx"] / global_env["nx"])
+            global_env["dx"] = global_env["tx"] / global_env["nx"]
         if varname in ["ty", "ny"] and "ty" in global_env and "ny" in global_env:
-            global_env["dy"] = int(global_env["ty"] / global_env["ny"])
+            global_env["dy"] = global_env["ty"] / global_env["ny"]
         if varname in ["tz", "nz"] and "tz" in global_env and "nz" in global_env:
-            global_env["dz"] = int(global_env["tz"] / global_env["nz"])
+            global_env["dz"] = global_env["tz"] / global_env["nz"]
         return f"{varname} defined as {value}"
     else:
         ast = parse_expression(cmd)
